@@ -1,0 +1,20 @@
+[package]
+name = "sb"
+version = "0.1.0"
+authors = ["David Rusu <davidrusu.me@gmail.com>"]
+edition = "2018"
+license = "MIT OR BSD-3-Clause"
+
+[dependencies]
+ed25519 = { version = "1.0.0", package = "ed25519-dalek", features = ["serde"] }
+#rand = "0.7.3"
+#sha2 = "0.8.1"
+serde = { version = "1.0.106", features=["derive"] }
+#bincode = "1.2.1"
+hex = "0.4.2"
+
+[profile.test]
+# Property testing is a power hungry beast, we need to go as fast as we can
+opt-level = 3
+lto = "fat" # noticed a very significant speed up from enabling lto, perf improvement of 1m33s -> 10s
+incremental = false
