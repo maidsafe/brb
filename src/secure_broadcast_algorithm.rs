@@ -3,7 +3,7 @@ use std::hash::Hash;
 
 use serde::Serialize;
 
-use crate::actor::Actor;
+use crate::Actor;
 
 pub trait SecureBroadcastAlgorithm: Clone + Debug + Eq {
     type Op: Debug + Clone + Hash + Eq + Serialize;

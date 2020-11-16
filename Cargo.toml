@@ -6,6 +6,7 @@ edition = "2018"
 license = "MIT OR BSD-3-Clause"
 
 [dependencies]
+crdts = "4.0.0"
 ed25519 = { version = "1.0.0", package = "ed25519-dalek", features = ["serde"] }
 serde = { version = "1.0.106", features=["derive"] }
 hex = "0.4.2"
