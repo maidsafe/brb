@@ -19,6 +19,8 @@ pub trait SecureBroadcastNetworkSimulator<I: SecureBroadcastImpl<A>, A: SecureBr
     /// are considered to be the network members.
     fn members(&self) -> HashSet<Actor>;
 
+    fn num_packets(&self) -> u64;
+
     /// Fetch the actors for each process in the network
     fn actors(&self) -> HashSet<Actor>;
 
