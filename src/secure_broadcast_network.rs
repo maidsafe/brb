@@ -7,6 +7,14 @@ pub trait SecureBroadcastNetwork<I: SecureBroadcastImpl<A>, A: SecureBroadcastAl
 
     fn new() -> Self;
 
+    /// Delivers a given packet to it's target recipiant.
+    /// The recipiant, upon processing this packet, may produce it's own packets.
+    /// This next set of packets are returned to the caller.
+    fn deliver_packet(&mut self, packet: Packet<A::Op>) -> Vec<Packet<A::Op>>;
+}
+
+pub trait SecureBroadcastNetworkSimulator<I: SecureBroadcastImpl<A>, A: SecureBroadcastAlgorithm>: Debug {
+
     /// The largest set of procs who mutually see each other as peers
     /// are considered to be the network members.
     fn members(&self) -> HashSet<Actor>;
@@ -41,11 +49,6 @@ pub trait SecureBroadcastNetwork<I: SecureBroadcastImpl<A>, A: SecureBroadcastAl
     /// Currently this is God mode implementations in that we don't
     /// use message passing and we share process state directly.
     fn anti_entropy(&mut self);
-
-    /// Delivers a given packet to it's target recipiant.
-    /// The recipiant, upon processing this packet, may produce it's own packets.
-    /// This next set of packets are returned to the caller.
-    fn deliver_packet(&mut self, packet: Packet<A::Op>) -> Vec<Packet<A::Op>>;
 
     /// Checks if all members of the network have converged to the same state.
     fn members_are_in_agreement(&self) -> bool;
