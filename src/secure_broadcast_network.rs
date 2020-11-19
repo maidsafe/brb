@@ -3,17 +3,17 @@ use std::fmt::Debug;
 
 use crate::{Actor, Packet, SecureBroadcastAlgorithm, SecureBroadcastImpl};
 
-pub trait SecureBroadcastNetwork<I: SecureBroadcastImpl<A>, A: SecureBroadcastAlgorithm>: Debug {
+pub trait SecureBroadcastNetwork<I: SecureBroadcastImpl>: Debug {
 
     fn new() -> Self;
 
     /// Delivers a given packet to it's target recipiant.
     /// The recipiant, upon processing this packet, may produce it's own packets.
     /// This next set of packets are returned to the caller.
-    fn deliver_packet(&mut self, packet: Packet<A::Op>) -> Vec<Packet<A::Op>>;
+    fn deliver_packet(&mut self, packet: Packet<<I::Algo as SecureBroadcastAlgorithm>::Op>) -> Vec<Packet<<I::Algo as SecureBroadcastAlgorithm>::Op>>;
 }
 
-pub trait SecureBroadcastNetworkSimulator<I: SecureBroadcastImpl<A>, A: SecureBroadcastAlgorithm>: Debug {
+pub trait SecureBroadcastNetworkSimulator<I: SecureBroadcastImpl>: Debug {
 
     /// The largest set of procs who mutually see each other as peers
     /// are considered to be the network members.
@@ -59,5 +59,5 @@ pub trait SecureBroadcastNetworkSimulator<I: SecureBroadcastImpl<A>, A: SecureBr
     /// that may result from delivering a packet.
     /// TODO: refactor to remove this allow(patterns_in_fns_without_body)
     #[allow(patterns_in_fns_without_body)]
-    fn run_packets_to_completion(&mut self, mut packets: Vec<Packet<A::Op>>);
+    fn run_packets_to_completion(&mut self, mut packets: Vec<Packet<<I::Algo as SecureBroadcastAlgorithm>::Op>>);
 }
