@@ -8,7 +8,7 @@ use crate::{Actor, Packet, ReplicatedState, SecureBroadcastAlgorithm};
 pub trait SecureBroadcastImpl: Debug {
     type Algo: SecureBroadcastAlgorithm;
 
-    fn new(known_peers: HashSet<Actor>) -> Self; 
+    fn new(known_peers: HashSet<Actor>) -> Self;
 
     fn keypair(&self) -> &Keypair;
 
@@ -22,9 +22,15 @@ pub trait SecureBroadcastImpl: Debug {
 
     fn sync_from(&mut self, state: ReplicatedState<Self::Algo>);
 
-    fn exec_algo_op(&self, f: impl FnOnce(&Self::Algo) -> Option<<Self::Algo as SecureBroadcastAlgorithm>::Op>) -> Vec<Packet<<Self::Algo as SecureBroadcastAlgorithm>::Op>>;
+    fn exec_algo_op(
+        &self,
+        f: impl FnOnce(&Self::Algo) -> Option<<Self::Algo as SecureBroadcastAlgorithm>::Op>,
+    ) -> Vec<Packet<<Self::Algo as SecureBroadcastAlgorithm>::Op>>;
 
     fn read_state<V>(&self, f: impl FnOnce(&Self::Algo) -> V) -> V;
 
-    fn handle_packet(&mut self, packet: Packet<<Self::Algo as SecureBroadcastAlgorithm>::Op>) -> Vec<Packet<<Self::Algo as SecureBroadcastAlgorithm>::Op>>;
+    fn handle_packet(
+        &mut self,
+        packet: Packet<<Self::Algo as SecureBroadcastAlgorithm>::Op>,
+    ) -> Vec<Packet<<Self::Algo as SecureBroadcastAlgorithm>::Op>>;
 }
