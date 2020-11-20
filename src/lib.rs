@@ -14,4 +14,4 @@ mod secure_broadcast_network;
 pub use secure_broadcast_network::{SecureBroadcastNetwork, SecureBroadcastNetworkSimulator};
 
 mod packet;
-pub use packet::{Packet, Payload, Msg, BFTOp, ReplicatedState};
+pub use packet::{BFTOp, Msg, Packet, Payload, ReplicatedState};

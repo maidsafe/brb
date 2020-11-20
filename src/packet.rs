@@ -4,9 +4,9 @@ use crate::{Actor, Sig};
 
 use std::collections::HashSet;
 
+use crate::SecureBroadcastAlgorithm;
 use crdts::{Dot, VClock};
 use serde::Serialize;
-use crate::SecureBroadcastAlgorithm;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ReplicatedState<A: SecureBroadcastAlgorithm> {
@@ -50,4 +50,3 @@ pub enum BFTOp<Op> {
     MembershipNewPeer(Actor),
     AlgoOp(Op),
 }
-
