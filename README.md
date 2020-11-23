@@ -5,7 +5,7 @@
 
 ## About
 
-This crate provides trait(s) that are implemented in the `sb_algo_*`, `sb_impl_*`, and `sb_net_*` crates.
+This crate provides traits that are implemented in the `sb_algo_*`, `sb_impl_*`, and `sb_net_*` crates.
 
 This crate and its related crates (`sb_*`) implement a loosely-coupled Byzantine Fault Tolerant (BFT) system for achieving network agreement over eventually consistent algorithms.
 
@@ -21,6 +21,8 @@ also include a TCP/IP sockets implementation.  pull-requests welcome!
 
 The loosely coupled nature of these crates make it easy** to pick any combination of:  (a) secure broadcast mechanism, (b) data type that is being secured, and (c) network transport layer.
 
+## SB Crates
+
 As of this initial writing, the crates are:
 
 |crate|description|
@@ -28,9 +30,17 @@ As of this initial writing, the crates are:
 |sb   |this crate. provides traits that other crates implement and depend on|
 |[sb_algo_at2](https://github.com/maidsafe/sb_algo_at2)|The [AT2 algorithm](https://arxiv.org/pdf/1812.10844.pdf) in an sb wrapper|
 |[sb_algo_orswot](https://github.com/maidsafe/sb_algo_orswot)|an sb wrapper for the Orswot CRDT algorithm in [rust-crdt](https://github.com/rust-crdt/rust-crdt/)|
-|[sb_impl_dsb](https://github.com/maidsafe/sb_impl_dsb)|sb implementation:  deterministic secure broadcast|
+|[sb_impl_dsb](https://github.com/maidsafe/sb_impl_dsb)|sb implementation: deterministic secure broadcast|
+|[sb_net_mem](https://github.com/dan-da/sb_net_mem)|sb network layer:  in memory network simulator|
 
-** note: The above description is a bit aspirational to give the vision.  At this moment, only a single trait exists that is implemented in each of the sb_algo_* crates.  Creating traits for sb_impl_* and sb_net_* is a TODO, as is de-coupling net.rs from sb_impl_dsb.
+## Traits
+
+trait | description
+----- | -----------
+|[SecureBroadcastAlgorithm](src/secure_broadcast_algorithm.rs)| Data types to be secured should impl this|
+|[SecureBroadcastProc](src/secure_broadcast_impl.rs)     | DSB implementations should impl this|
+|[SecureBroadcastNetwork](src/secure_broadcast_network.rs)  | Network transports should impl this |
+|[SecureBroadcastNetworkSimulator](src/secure_broadcast_network.rs) | Network Simulators should impl this, for use in tests |
 
 ## Prior Work
 
