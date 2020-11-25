@@ -5,7 +5,7 @@ use ed25519::Keypair;
 
 use crate::{Actor, Packet, ReplicatedState, SecureBroadcastAlgorithm};
 
-pub trait SecureBroadcastImpl: Debug {
+pub trait SecureBroadcastImpl: Debug + Send {
     type Algo: SecureBroadcastAlgorithm;
 
     fn new(known_peers: HashSet<Actor>) -> Self;

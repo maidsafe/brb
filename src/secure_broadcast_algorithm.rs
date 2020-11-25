@@ -1,12 +1,12 @@
 use std::fmt::Debug;
 use std::hash::Hash;
 
-use serde::Serialize;
+use serde::{Serialize, de::DeserializeOwned};
 
 use crate::Actor;
 
-pub trait SecureBroadcastAlgorithm: Clone + Debug + Eq {
-    type Op: Debug + Clone + Hash + Eq + Serialize;
+pub trait SecureBroadcastAlgorithm: Clone + Debug + Eq + Send {
+    type Op: Debug + Clone + Hash + Eq + Serialize + DeserializeOwned + Send;
     type ReplicatedState: Clone + Debug + Eq;
 
     /// initialize a new replica of this algorithm

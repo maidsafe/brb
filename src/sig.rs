@@ -3,9 +3,9 @@ use std::hash::{Hash, Hasher};
 
 use ed25519::Signature;
 
-use serde::Serialize;
+use serde::{Serialize, Deserialize};
 
-#[derive(Eq, Clone, Copy, Serialize)]
+#[derive(Eq, Clone, Copy, Serialize, Deserialize)]
 pub struct Sig(pub Signature);
 
 impl PartialEq for Sig {

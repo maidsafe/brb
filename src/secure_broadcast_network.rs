@@ -3,6 +3,9 @@ use std::fmt::Debug;
 
 use crate::{Actor, Packet, SecureBroadcastAlgorithm, SecureBroadcastImpl};
 
+use async_trait::async_trait;
+
+#[async_trait]
 pub trait SecureBroadcastNetwork<I: SecureBroadcastImpl>: Debug {
     fn new() -> Self;
 
@@ -13,6 +16,8 @@ pub trait SecureBroadcastNetwork<I: SecureBroadcastImpl>: Debug {
         &mut self,
         packet: Packet<<I::Algo as SecureBroadcastAlgorithm>::Op>,
     ) -> Vec<Packet<<I::Algo as SecureBroadcastAlgorithm>::Op>>;
+
+    async fn listen_for_network_msgs(&mut self, dsb: &mut I);
 }
 
 pub trait SecureBroadcastNetworkSimulator<I: SecureBroadcastImpl>: Debug {
