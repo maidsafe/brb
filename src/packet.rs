@@ -6,16 +6,16 @@ use std::collections::HashSet;
 
 use crate::SecureBroadcastAlgorithm;
 use crdts::{Dot, VClock};
-use serde::Serialize;
+use serde::{Serialize, Deserialize};
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ReplicatedState<A: SecureBroadcastAlgorithm> {
     pub algo_state: A::ReplicatedState,
     pub peers: HashSet<Actor>,
     pub delivered: VClock<Actor>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Packet<Op> {
     pub source: Actor,
     pub dest: Actor,
@@ -23,7 +23,7 @@ pub struct Packet<Op> {
     pub sig: Sig,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Payload<Op> {
     RequestValidation {
         msg: Msg<Op>,
@@ -38,13 +38,13 @@ pub enum Payload<Op> {
     },
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub struct Msg<Op> {
     pub op: BFTOp<Op>,
     pub dot: Dot<Actor>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub enum BFTOp<Op> {
     // TODO: support peers leaving
     MembershipNewPeer(Actor),

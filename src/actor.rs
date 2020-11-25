@@ -4,9 +4,9 @@ use std::hash::{Hash, Hasher};
 
 use ed25519::PublicKey;
 
-use serde::Serialize;
+use serde::{Serialize, Deserialize};
 
-#[derive(Eq, Clone, Copy, Serialize)]
+#[derive(Eq, Clone, Copy, Serialize, Deserialize)]
 pub struct Actor(pub PublicKey);
 
 impl PartialEq for Actor {
