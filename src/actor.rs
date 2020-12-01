@@ -4,7 +4,7 @@ use std::hash::{Hash, Hasher};
 
 use ed25519::PublicKey;
 
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 #[derive(Eq, Clone, Copy, Serialize, Deserialize)]
 pub struct Actor(pub PublicKey);

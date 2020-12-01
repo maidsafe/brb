@@ -12,12 +12,11 @@ pub trait SecureBroadcastNetwork<I: SecureBroadcastImpl>: Debug {
     /// Delivers a given packet to it's target recipiant.
     /// The recipiant, upon processing this packet, may produce it's own packets.
     /// This next set of packets are returned to the caller.
-    fn deliver_packet(
-        &mut self,
-        packet: Packet<<I::Algo as SecureBroadcastAlgorithm>::Op>,
-    ) -> Vec<Packet<<I::Algo as SecureBroadcastAlgorithm>::Op>>;
+    fn deliver_packet(&mut self, packet: Packet<<I::Algo as SecureBroadcastAlgorithm>::Op>);
 
     async fn listen_for_network_msgs(&mut self, dsb: &mut I);
+
+    fn listen_for_network_msg(&mut self, dsb: &mut I);
 }
 
 pub trait SecureBroadcastNetworkSimulator<I: SecureBroadcastImpl>: Debug {
@@ -25,6 +24,7 @@ pub trait SecureBroadcastNetworkSimulator<I: SecureBroadcastImpl>: Debug {
     /// are considered to be the network members.
     fn members(&self) -> HashSet<Actor>;
 
+    /// Total number of packets delivered.
     fn num_packets(&self) -> u64;
 
     /// Fetch the actors for each process in the network
