@@ -3,7 +3,7 @@ use std::hash::{Hash, Hasher};
 
 use ed25519::Signature;
 
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 #[derive(Eq, Clone, Copy, Serialize, Deserialize)]
 pub struct Sig(pub Signature);

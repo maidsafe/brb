@@ -6,7 +6,7 @@ use std::collections::HashSet;
 
 use crate::SecureBroadcastAlgorithm;
 use crdts::{Dot, VClock};
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ReplicatedState<A: SecureBroadcastAlgorithm> {
