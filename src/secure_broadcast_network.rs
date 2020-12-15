@@ -7,16 +7,16 @@ use async_trait::async_trait;
 
 #[async_trait]
 pub trait SecureBroadcastNetwork<I: SecureBroadcastImpl>: Debug {
-    fn new() -> Self;
-
     /// Delivers a given packet to it's target recipiant.
     /// The recipiant, upon processing this packet, may produce it's own packets.
     /// This next set of packets are returned to the caller.
     fn deliver_packet(&mut self, packet: Packet<<I::Algo as SecureBroadcastAlgorithm>::Op>);
 
-    async fn listen_for_network_msgs(&mut self, dsb: &mut I);
+    async fn deliver_packet_async(&mut self, packet: Packet<<I::Algo as SecureBroadcastAlgorithm>::Op>);
 
-    fn listen_for_network_msg(&mut self, dsb: &mut I);
+    async fn listen_for_network_msgs(&mut self, brb: &mut I);
+
+    fn listen_for_network_msg(&mut self, brb: &mut I);
 }
 
 pub trait SecureBroadcastNetworkSimulator<I: SecureBroadcastImpl>: Debug {
