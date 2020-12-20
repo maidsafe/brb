@@ -4,6 +4,7 @@ use std::fmt::Debug;
 use ed25519::Keypair;
 
 use crate::{Actor, Packet, ReplicatedState, SecureBroadcastAlgorithm};
+use anyhow::Result;
 
 pub trait SecureBroadcastImpl: Debug + Send {
     type Algo: SecureBroadcastAlgorithm;
@@ -18,19 +19,19 @@ pub trait SecureBroadcastImpl: Debug + Send {
 
     fn peers(&self) -> HashSet<Actor>;
 
-    fn request_membership(&self) -> Vec<Packet<<Self::Algo as SecureBroadcastAlgorithm>::Op>>;
+    fn request_membership(&self) -> Result<Vec<Packet<<Self::Algo as SecureBroadcastAlgorithm>::Op>>>;
 
     fn sync_from(&mut self, state: ReplicatedState<Self::Algo>);
 
     fn exec_algo_op(
         &self,
         f: impl FnOnce(&Self::Algo) -> Option<<Self::Algo as SecureBroadcastAlgorithm>::Op>,
-    ) -> Vec<Packet<<Self::Algo as SecureBroadcastAlgorithm>::Op>>;
+    ) -> Result<Vec<Packet<<Self::Algo as SecureBroadcastAlgorithm>::Op>>>;
 
     fn read_state<V>(&self, f: impl FnOnce(&Self::Algo) -> V) -> V;
 
     fn handle_packet(
         &mut self,
         packet: Packet<<Self::Algo as SecureBroadcastAlgorithm>::Op>,
-    ) -> Vec<Packet<<Self::Algo as SecureBroadcastAlgorithm>::Op>>;
+    ) -> Result<Vec<Packet<<Self::Algo as SecureBroadcastAlgorithm>::Op>>>;
 }

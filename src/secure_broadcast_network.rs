@@ -4,19 +4,20 @@ use std::fmt::Debug;
 use crate::{Actor, Packet, SecureBroadcastAlgorithm, SecureBroadcastImpl};
 
 use async_trait::async_trait;
+use anyhow::Result;
 
 #[async_trait]
 pub trait SecureBroadcastNetwork<I: SecureBroadcastImpl>: Debug {
     /// Delivers a given packet to it's target recipiant.
     /// The recipiant, upon processing this packet, may produce it's own packets.
     /// This next set of packets are returned to the caller.
-    fn deliver_packet(&mut self, packet: Packet<<I::Algo as SecureBroadcastAlgorithm>::Op>);
+    fn deliver_packet(&mut self, packet: Packet<<I::Algo as SecureBroadcastAlgorithm>::Op>)  -> Result<()>;
 
-    async fn deliver_packet_async(&mut self, packet: Packet<<I::Algo as SecureBroadcastAlgorithm>::Op>);
+    async fn deliver_packet_async(&mut self, packet: Packet<<I::Algo as SecureBroadcastAlgorithm>::Op>) -> Result<()>;
 
-    async fn listen_for_network_msgs(&mut self, brb: &mut I);
+    async fn listen_for_network_msgs(&mut self, brb: &mut I) -> Result<()>;
 
-    fn listen_for_network_msg(&mut self, brb: &mut I);
+    fn listen_for_network_msg(&mut self, brb: &mut I) -> Result<()>;
 }
 
 pub trait SecureBroadcastNetworkSimulator<I: SecureBroadcastImpl>: Debug {
@@ -48,7 +49,7 @@ pub trait SecureBroadcastNetworkSimulator<I: SecureBroadcastImpl>: Debug {
     /// Perform anti-entropy corrections on the network.
     /// Currently this is God mode implementations in that we don't
     /// use message passing and we share process state directly.
-    fn anti_entropy(&mut self);
+    fn anti_entropy(&mut self) -> Result<()>;
 
     /// Checks if all members of the network have converged to the same state.
     fn members_are_in_agreement(&self) -> bool;
@@ -60,5 +61,5 @@ pub trait SecureBroadcastNetworkSimulator<I: SecureBroadcastImpl>: Debug {
     fn run_packets_to_completion(
         &mut self,
         mut packets: Vec<Packet<<I::Algo as SecureBroadcastAlgorithm>::Op>>,
-    );
+    ) -> Result<()>;
 }
