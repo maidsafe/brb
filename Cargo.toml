@@ -1,5 +1,5 @@
 [package]
-name = "brb"
+name = "bft-crdts"
 version = "0.1.0"
 authors = ["David Rusu <davidrusu.me@gmail.com>"]
 edition = "2018"
@@ -8,13 +8,13 @@ license = "MIT OR BSD-3-Clause"
 [dependencies]
 crdts = "4.0.0"
 ed25519 = { version = "1.0.0", package = "ed25519-dalek", features = ["serde"] }
-serde = { version = "1.0.106", features=["derive"] }
+rand = "0.7.3"
+serde = "1.0.106"
+bincode = "1.2.1"
 hex = "0.4.2"
-async-trait = "0.1.42"
-anyhow = "1.0.35"
+thiserror = "1.0"
 
-[profile.test]
-# Property testing is a power hungry beast, we need to go as fast as we can
-opt-level = 3
-lto = "fat" # noticed a very significant speed up from enabling lto, perf improvement of 1m33s -> 10s
-incremental = false
+#[profile.test]
+#opt-level = 3
+#lto = "fat"
+#incremental = false
