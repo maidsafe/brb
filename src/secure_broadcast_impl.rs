@@ -19,7 +19,9 @@ pub trait SecureBroadcastImpl: Debug + Send {
 
     fn peers(&self) -> HashSet<Actor>;
 
-    fn request_membership(&self) -> Result<Vec<Packet<<Self::Algo as SecureBroadcastAlgorithm>::Op>>>;
+    fn request_membership(
+        &self,
+    ) -> Result<Vec<Packet<<Self::Algo as SecureBroadcastAlgorithm>::Op>>>;
 
     fn sync_from(&mut self, state: ReplicatedState<Self::Algo>);
 

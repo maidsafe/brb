@@ -3,17 +3,23 @@ use std::fmt::Debug;
 
 use crate::{Actor, Packet, SecureBroadcastAlgorithm, SecureBroadcastImpl};
 
-use async_trait::async_trait;
 use anyhow::Result;
+use async_trait::async_trait;
 
 #[async_trait]
 pub trait SecureBroadcastNetwork<I: SecureBroadcastImpl>: Debug {
     /// Delivers a given packet to it's target recipiant.
     /// The recipiant, upon processing this packet, may produce it's own packets.
     /// This next set of packets are returned to the caller.
-    fn deliver_packet(&mut self, packet: Packet<<I::Algo as SecureBroadcastAlgorithm>::Op>)  -> Result<()>;
+    fn deliver_packet(
+        &mut self,
+        packet: Packet<<I::Algo as SecureBroadcastAlgorithm>::Op>,
+    ) -> Result<()>;
 
-    async fn deliver_packet_async(&mut self, packet: Packet<<I::Algo as SecureBroadcastAlgorithm>::Op>) -> Result<()>;
+    async fn deliver_packet_async(
+        &mut self,
+        packet: Packet<<I::Algo as SecureBroadcastAlgorithm>::Op>,
+    ) -> Result<()>;
 
     async fn listen_for_network_msgs(&mut self, brb: &mut I) -> Result<()>;
 
