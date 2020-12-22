@@ -4,19 +4,19 @@ use std::fs::File;
 use std::io::Write;
 
 use crate::actor::Actor;
-use crate::deterministic_secure_broadcast::SecureBroadcastProc;
+use crate::deterministic_brb::DeterministicBRB;
 use crate::packet::Packet;
-use crate::traits::SecureBroadcastAlgorithm;
+use crate::brb_algorithm::BRBAlgorithm;
 
 #[derive(Debug)]
-pub struct Net<A: SecureBroadcastAlgorithm> {
-    pub procs: Vec<SecureBroadcastProc<A>>,
+pub struct Net<A: BRBAlgorithm> {
+    pub procs: Vec<DeterministicBRB<A>>,
     pub delivered_packets: Vec<Packet<A::Op>>,
     pub n_packets: u64,
     pub invalid_packets: HashMap<Actor, u64>,
 }
 
-impl<A: SecureBroadcastAlgorithm> Net<A> {
+impl<A: BRBAlgorithm> Net<A> {
     pub fn new() -> Self {
         Self {
             procs: Vec::new(),
@@ -51,7 +51,7 @@ impl<A: SecureBroadcastAlgorithm> Net<A> {
 
     /// Initialize a new process (NOTE: we do not request membership from the network automatically)
     pub fn initialize_proc(&mut self) -> Actor {
-        let proc = SecureBroadcastProc::new();
+        let proc = DeterministicBRB::new();
         let actor = proc.actor();
         self.procs.push(proc);
         actor
@@ -61,7 +61,7 @@ impl<A: SecureBroadcastAlgorithm> Net<A> {
     pub fn on_proc<V>(
         &self,
         actor: &Actor,
-        f: impl FnOnce(&SecureBroadcastProc<A>) -> V,
+        f: impl FnOnce(&DeterministicBRB<A>) -> V,
     ) -> Option<V> {
         self.proc_from_actor(actor).map(|p| f(p))
     }
@@ -70,20 +70,20 @@ impl<A: SecureBroadcastAlgorithm> Net<A> {
     pub fn on_proc_mut<V>(
         &mut self,
         actor: &Actor,
-        f: impl FnOnce(&mut SecureBroadcastProc<A>) -> V,
+        f: impl FnOnce(&mut DeterministicBRB<A>) -> V,
     ) -> Option<V> {
         self.proc_from_actor_mut(actor).map(|p| f(p))
     }
 
     /// Get a (immutable) reference to a proc with the given actor.
-    pub fn proc_from_actor(&self, actor: &Actor) -> Option<&SecureBroadcastProc<A>> {
+    pub fn proc_from_actor(&self, actor: &Actor) -> Option<&DeterministicBRB<A>> {
         self.procs
             .iter()
             .find(|secure_p| &secure_p.actor() == actor)
     }
 
     /// Get a (mutable) reference to a proc with the given actor.
-    pub fn proc_from_actor_mut(&mut self, actor: &Actor) -> Option<&mut SecureBroadcastProc<A>> {
+    pub fn proc_from_actor_mut(&mut self, actor: &Actor) -> Option<&mut DeterministicBRB<A>> {
         self.procs
             .iter_mut()
             .find(|secure_p| &secure_p.actor() == actor)
