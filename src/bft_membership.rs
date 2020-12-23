@@ -5,7 +5,6 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::actor::{Actor, Sig, SigningActor};
-use crate::packet::{Packet, Payload};
 
 const SOFT_MAX_MEMBERS: usize = 7;
 pub type Generation = u64;
@@ -131,6 +130,12 @@ impl Vote {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct VoteMsg {
+    pub vote: Vote,
+    pub dest: Actor,
+}
+
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("Vote has an invalid signature")]
@@ -216,12 +221,12 @@ impl State {
         Err(Error::InvalidGeneration(gen))
     }
 
-    pub fn propose<T: Serialize>(&mut self, reconfig: Reconfig) -> Result<Vec<Packet<T>>, Error> {
+    pub fn propose(&mut self, reconfig: Reconfig) -> Result<Vec<VoteMsg>, Error> {
         let vote = self.build_vote(self.gen + 1, Ballot::Propose(reconfig))?;
         self.cast_vote(vote)
     }
 
-    pub fn handle_vote<T: Serialize>(&mut self, vote: Vote) -> Result<Vec<Packet<T>>, Error> {
+    pub fn handle_vote(&mut self, vote: Vote) -> Result<Vec<VoteMsg>, Error> {
         self.validate_vote(&vote)?;
 
         self.log_vote(&vote);
@@ -285,16 +290,16 @@ impl State {
                     })
                     .collect();
 
-                return new_members
+                return Ok(new_members
                     .into_iter()
                     .flat_map(|p| {
                         // deliver the history in order from gen=1 onwards
                         self.history
                             .iter() // history is a BTreeSet, .iter() is ordered by generation
                             .map(|(_gen, membership_proof)| self.send(membership_proof.clone(), p))
-                            .collect::<Vec<Result<_, _>>>()
+                            .collect::<Vec<_>>()
                     })
-                    .collect::<Result<Vec<_>, Error>>();
+                    .collect());
             } else {
                 return Ok(vec![]);
             }
@@ -311,7 +316,7 @@ impl State {
                 // We can not change our vote since all we know is that a subset of the network saw
                 // super majority. It could still be the case that two disjoint subsets of the network
                 // see different super majorities, this case will be resolved by the split vote detection
-                // as more packets are delivered.
+                // as more messages are delivered.
 
                 let super_majority_reconfigs =
                     self.resolve_votes(&self.votes.values().cloned().collect());
@@ -360,7 +365,7 @@ impl State {
         })
     }
 
-    fn cast_vote<T: Serialize>(&mut self, vote: Vote) -> Result<Vec<Packet<T>>, Error> {
+    fn cast_vote(&mut self, vote: Vote) -> Result<Vec<VoteMsg>, Error> {
         self.validate_vote(&vote)?;
         self.pending_gen = vote.gen;
         self.log_vote(&vote);
@@ -569,24 +574,17 @@ impl State {
         }
     }
 
-    fn broadcast<T: Serialize>(&self, vote: Vote) -> Result<Vec<Packet<T>>, Error> {
-        self.members(self.gen)?
+    fn broadcast(&self, vote: Vote) -> Result<Vec<VoteMsg>, Error> {
+        Ok(self
+            .members(self.gen)?
             .iter()
             .cloned()
             .map(|member| self.send(vote.clone(), member))
-            .collect()
+            .collect())
     }
 
-    fn send<T: Serialize>(&self, vote: Vote, dest: Actor) -> Result<Packet<T>, Error> {
-        let source = self.id.actor();
-        let payload = Payload::Membership(vote);
-        let sig = self.id.sign(&payload)?;
-        Ok(Packet {
-            source,
-            dest,
-            payload,
-            sig,
-        })
+    fn send(&self, vote: Vote, dest: Actor) -> VoteMsg {
+        VoteMsg { vote, dest }
     }
 }
 
@@ -598,13 +596,19 @@ mod tests {
 
     use crdts::quickcheck::{quickcheck, Arbitrary, Gen, TestResult};
 
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    struct Packet {
+        source: Actor,
+        vote_msg: VoteMsg,
+    }
+
     #[derive(Default, Debug)]
-    pub struct Net {
-        pub procs: Vec<State>,
-        pub reconfigs_by_gen: BTreeMap<Generation, BTreeSet<Reconfig>>,
-        pub members_at_gen: BTreeMap<Generation, BTreeSet<Actor>>,
-        pub packets: BTreeMap<Actor, Vec<Packet<()>>>,
-        pub delivered_packets: Vec<Packet<()>>,
+    struct Net {
+        procs: Vec<State>,
+        reconfigs_by_gen: BTreeMap<Generation, BTreeSet<Reconfig>>,
+        members_at_gen: BTreeMap<Generation, BTreeSet<Actor>>,
+        packets: BTreeMap<Actor, Vec<Packet>>,
+        delivered_packets: Vec<Packet>,
     }
 
     impl Net {
@@ -630,13 +634,13 @@ mod tests {
                 return;
             };
 
-            let dest = packet.dest;
+            let dest = packet.vote_msg.dest;
 
             assert_eq!(packet.source, source);
 
             println!(
                 "delivering {:?}->{:?} {:#?}",
-                packet.source, packet.dest, packet
+                packet.source, packet.vote_msg.dest, packet
             );
 
             self.delivered_packets.push(packet.clone());
@@ -650,7 +654,10 @@ mod tests {
 
             assert_eq!(packet.source, source);
 
-            let dest_proc_opt = self.procs.iter_mut().find(|p| p.id.actor() == packet.dest);
+            let dest_proc_opt = self
+                .procs
+                .iter_mut()
+                .find(|p| p.id.actor() == packet.vote_msg.dest);
 
             let dest_proc = match dest_proc_opt {
                 Some(proc) => proc,
@@ -661,23 +668,19 @@ mod tests {
             };
 
             let dest_members = dest_proc.members(dest_proc.gen).unwrap();
-            let vote = match packet.payload {
-                Payload::Membership(vote) => vote,
-                _ => panic!("Unexpected payload type"),
-            };
+            let vote = packet.vote_msg.vote;
 
             let resp = dest_proc.handle_vote(vote);
             println!("[NET] resp: {:#?}", resp);
             match resp {
-                Ok(resp_packets) => {
+                Ok(vote_msgs) => {
                     // A process only accepts a packet if it considers the sender a member
                     assert!(dest_members.contains(&source));
-
-                    // TODO: inspect these packets
-                    assert!(resp_packets
-                        .iter()
-                        .all(|p| p.source == dest_proc.id.actor()));
-                    self.queue_packets(resp_packets);
+                    let dest_actor = dest_proc.id.actor();
+                    self.queue_packets(vote_msgs.into_iter().map(|vote_msg| Packet {
+                        source: dest_actor,
+                        vote_msg,
+                    }));
                 }
                 Err(Error::VoteFromNonMember { voter, members }) => {
                     assert_eq!(voter, source, "{:?} not in {:?}", voter, members);
@@ -711,7 +714,7 @@ mod tests {
             }
         }
 
-        pub fn queue_packets(&mut self, packets: impl IntoIterator<Item = Packet<()>>) {
+        pub fn queue_packets(&mut self, packets: impl IntoIterator<Item = Packet>) {
             for packet in packets {
                 self.packets.entry(packet.source).or_default().push(packet);
             }
@@ -752,12 +755,7 @@ msc {\n
             for packet in self.delivered_packets.iter() {
                 msc.push_str(&format!(
                     "{} -> {} [ label=\"{:?}\"];\n",
-                    packet.source,
-                    packet.dest,
-                    match &packet.payload {
-                        Payload::Membership(v) => v,
-                        _ => panic!("invalid payload"),
-                    }
+                    packet.source, packet.vote_msg.dest, packet.vote_msg.vote
                 ));
             }
 
@@ -778,9 +776,9 @@ msc {\n
     fn test_reject_changing_reconfig_when_one_is_in_progress() {
         let mut proc = State::default();
         proc.trust(proc.id.actor());
-        assert!(proc.propose::<()>(Reconfig::Join(Actor::default())).is_ok());
+        assert!(proc.propose(Reconfig::Join(Actor::default())).is_ok());
         assert!(matches!(
-            proc.propose::<()>(Reconfig::Join(Actor::default())),
+            proc.propose(Reconfig::Join(Actor::default())),
             Err(Error::ExistingVoteIncompatibleWithNewVote { .. })
         ));
     }
@@ -796,7 +794,10 @@ msc {\n
 
         let resp = net.procs[1].propose(Reconfig::Join(Default::default()));
         assert!(resp.is_ok());
-        net.queue_packets(resp.unwrap());
+        net.queue_packets(resp.unwrap().into_iter().map(|vote_msg| Packet {
+            source: p1,
+            vote_msg,
+        }));
         net.drain_queued_packets();
     }
 
@@ -809,12 +810,12 @@ msc {\n
         proc.trust(proc.id.actor());
 
         assert!(matches!(
-            proc.propose::<()>(Reconfig::Join(Actor::default())),
+            proc.propose(Reconfig::Join(Actor::default())),
             Err(Error::MembersAtCapacity { .. })
         ));
 
         assert!(proc
-            .propose::<()>(Reconfig::Leave(
+            .propose(Reconfig::Leave(
                 proc.members(proc.gen).unwrap().into_iter().next().unwrap()
             ))
             .is_ok())
@@ -830,7 +831,7 @@ msc {\n
 
         let member = proc.members(proc.gen).unwrap().into_iter().next().unwrap();
         assert!(matches!(
-            proc.propose::<()>(Reconfig::Join(member)),
+            proc.propose(Reconfig::Join(member)),
             Err(Error::JoinRequestForExistingMember { .. })
         ));
     }
@@ -845,7 +846,7 @@ msc {\n
 
         let leaving_actor = Actor::default();
         assert!(matches!(
-            proc.propose::<()>(Reconfig::Leave(leaving_actor)),
+            proc.propose(Reconfig::Leave(leaving_actor)),
             Err(Error::LeaveRequestForNonMember { .. })
         ));
     }
@@ -861,11 +862,25 @@ msc {\n
         net.procs[1].trust(a_1);
 
         let packets = net.procs[0]
-            .propose::<()>(Reconfig::Join(Actor::default()))
-            .unwrap();
+            .propose(Reconfig::Join(Actor::default()))
+            .unwrap()
+            .into_iter()
+            .map(|vote_msg| Packet {
+                source: a_0,
+                vote_msg,
+            })
+            .collect::<Vec<_>>();
+
         let mut stale_packets = net.procs[1]
-            .propose::<()>(Reconfig::Join(Actor::default()))
-            .unwrap();
+            .propose(Reconfig::Join(Actor::default()))
+            .unwrap()
+            .into_iter()
+            .map(|vote_msg| Packet {
+                source: a_1,
+                vote_msg,
+            })
+            .collect::<Vec<_>>();
+
         net.procs[1].pending_gen = 0;
         net.procs[1].votes = Default::default();
 
@@ -876,13 +891,10 @@ msc {\n
         net.drain_queued_packets();
 
         println!("net: {:#?}", net);
-        let vote = match stale_packets.pop().unwrap().payload {
-            Payload::Membership(vote) => vote,
-            _ => panic!("Unexpected payload type"),
-        };
+        let vote = stale_packets.pop().unwrap().vote_msg.vote;
 
         assert!(matches!(
-            net.procs[0].handle_vote::<()>(vote),
+            net.procs[0].handle_vote(vote),
             Err(Error::VoteNotForNextGeneration {
                 vote_gen: 1,
                 gen: 1,
@@ -898,7 +910,7 @@ msc {\n
         let gen = proc.gen + 1;
         let voter = Default::default();
         let sig = SigningActor::default().sign((&ballot, &gen)).unwrap();
-        let resp = proc.handle_vote::<()>(Vote {
+        let resp = proc.handle_vote(Vote {
             ballot,
             gen,
             voter,
@@ -923,7 +935,15 @@ msc {\n
                 net.procs[nprocs..].iter().map(|p| p.id.actor()).collect();
             for i in 0..nprocs {
                 let member = joining_members[i];
-                let packets = net.procs[i].propose(Reconfig::Join(member)).unwrap();
+                let a_i = net.procs[i].id.actor();
+                let packets = net.procs[i]
+                    .propose(Reconfig::Join(member))
+                    .unwrap()
+                    .into_iter()
+                    .map(|vote_msg| Packet {
+                        source: a_i,
+                        vote_msg,
+                    });
                 net.queue_packets(packets);
             }
 
@@ -964,7 +984,15 @@ msc {\n
                 net.procs[nprocs..].iter().map(|p| p.id.actor()).collect();
             for i in 0..nprocs {
                 let member = joining_members[i];
-                let packets = net.procs[i].propose(Reconfig::Join(member)).unwrap();
+                let a_i = net.procs[i].id.actor();
+                let packets = net.procs[i]
+                    .propose(Reconfig::Join(member))
+                    .unwrap()
+                    .into_iter()
+                    .map(|vote_msg| Packet {
+                        source: a_i,
+                        vote_msg,
+                    });
                 net.queue_packets(packets);
             }
 
@@ -1005,11 +1033,25 @@ msc {\n
         for i in 0..3 {
             net.procs[i].trust(p0);
         }
-        let packets = net.procs[0].propose(Reconfig::Join(p1)).unwrap();
+        let packets = net.procs[0]
+            .propose(Reconfig::Join(p1))
+            .unwrap()
+            .into_iter()
+            .map(|vote_msg| Packet {
+                source: p0,
+                vote_msg,
+            });
         net.queue_packets(packets);
         net.deliver_packet_from_source(p0);
         net.deliver_packet_from_source(p0);
-        let packets = net.procs[0].propose(Reconfig::Join(p2)).unwrap();
+        let packets = net.procs[0]
+            .propose(Reconfig::Join(p2))
+            .unwrap()
+            .into_iter()
+            .map(|vote_msg| Packet {
+                source: p0,
+                vote_msg,
+            });
         net.queue_packets(packets);
         net.drain_queued_packets();
 
@@ -1043,8 +1085,16 @@ msc {\n
             }
         }
 
+        let proc_0 = net.procs[0].id.actor();
         let proc_3 = net.procs[3].id.actor();
-        let packets = net.procs[0].propose(Reconfig::Join(proc_3)).unwrap();
+        let packets = net.procs[0]
+            .propose(Reconfig::Join(proc_3))
+            .unwrap()
+            .into_iter()
+            .map(|vote_msg| Packet {
+                source: proc_0,
+                vote_msg,
+            });
         net.queue_packets(packets);
         net.drain_queued_packets();
 
@@ -1136,10 +1186,13 @@ msc {\n
                         let reconfig = Reconfig::Join(p);
 
                         let q = &mut net.procs[q_idx.min(n - 1)];
+            let q_actor = q.id.actor();
                         match q.propose(reconfig.clone()) {
-                            Ok(propose_packets) => {
+                            Ok(propose_vote_msgs) => {
+                let propose_packets = propose_vote_msgs
+                    .into_iter()
+                    .map(|vote_msg| Packet { source: q_actor, vote_msg });
                                 net.reconfigs_by_gen.entry(q.pending_gen).or_default().insert(reconfig);
-                                assert!(propose_packets.iter().all(|p| p.source == q.id.actor()));
                                 net.queue_packets(propose_packets);
                             }
                             Err(Error::JoinRequestForExistingMember { .. }) => {
@@ -1166,12 +1219,15 @@ msc {\n
                         let reconfig = Reconfig::Leave(p);
 
                         let q = &mut net.procs[q_idx.min(n - 1)];
+            let q_actor = q.id.actor();
                         match q.propose(reconfig.clone()) {
-                            Ok(propose_packets) => {
+                            Ok(propose_vote_msgs) => {
+                let propose_packets = propose_vote_msgs.
+                    into_iter().
+                    map(|vote_msg| Packet { source: q_actor, vote_msg });
                                 net.reconfigs_by_gen.entry(q.pending_gen).or_default().insert(reconfig);
-                                assert!(propose_packets.iter().all(|p| p.source == q.id.actor()));
                                 net.queue_packets(propose_packets);
-                            }
+                }
                             Err(Error::LeaveRequestForNonMember { .. }) => {
                                 assert!(!q.members(q.gen).unwrap().contains(&p));
                             }

@@ -4,9 +4,9 @@ use std::fs::File;
 use std::io::Write;
 
 use crate::actor::Actor;
+use crate::brb_algorithm::BRBAlgorithm;
 use crate::deterministic_brb::DeterministicBRB;
 use crate::packet::Packet;
-use crate::brb_algorithm::BRBAlgorithm;
 
 #[derive(Debug)]
 pub struct Net<A: BRBAlgorithm> {
