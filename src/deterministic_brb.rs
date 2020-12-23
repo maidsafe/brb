@@ -3,8 +3,8 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use crate::actor::{Actor, Sig};
 use crate::bft_membership::{self, Generation};
-use crate::packet::{Packet, Payload};
 use crate::brb_algorithm::BRBAlgorithm;
+use crate::packet::{Packet, Payload};
 
 use crdts::{CmRDT, CvRDT, Dot, VClock};
 use serde::{Deserialize, Serialize};
@@ -156,19 +156,20 @@ impl<A: BRBAlgorithm> DeterministicBRB<A> {
         self.membership.trust(peer);
     }
 
-    pub fn request_membership(
-        &mut self,
-        actor: Actor,
-    ) -> Result<Vec<Packet<A::Op>>, bft_membership::Error> {
-        Ok(self
-            .membership
-            .propose(bft_membership::Reconfig::Join(actor))?)
+    pub fn request_membership(&mut self, actor: Actor) -> Result<Vec<Packet<A::Op>>, Error> {
+        self.membership
+            .propose(bft_membership::Reconfig::Join(actor))?
+            .into_iter()
+            .map(|vote_msg| self.send(vote_msg.dest, Payload::Membership(vote_msg.vote)))
+            .collect()
     }
 
-    pub fn kill_peer(&mut self, actor: Actor) -> Result<Vec<Packet<A::Op>>, bft_membership::Error> {
-        Ok(self
-            .membership
-            .propose(bft_membership::Reconfig::Leave(actor))?)
+    pub fn kill_peer(&mut self, actor: Actor) -> Result<Vec<Packet<A::Op>>, Error> {
+        self.membership
+            .propose(bft_membership::Reconfig::Leave(actor))?
+            .into_iter()
+            .map(|vote_msg| self.send(vote_msg.dest, Payload::Membership(vote_msg.vote)))
+            .collect()
     }
 
     pub fn sync_from(&mut self, state: ReplicatedState<A>) {
@@ -213,9 +214,13 @@ impl<A: BRBAlgorithm> DeterministicBRB<A> {
     fn process_packet(&mut self, packet: Packet<A::Op>) -> Result<Vec<Packet<A::Op>>, Error> {
         match packet.payload {
             Payload::BRB(op) => self.process_secure_broadcast_op(packet.source, op),
-            Payload::Membership(vote) => {
-                self.membership.handle_vote(vote).map_err(Error::Membership)
-            }
+            Payload::Membership(vote) => self
+                .membership
+                .handle_vote(vote)
+                .map_err(Error::Membership)?
+                .into_iter()
+                .map(|vote_msg| self.send(vote_msg.dest, Payload::Membership(vote_msg.vote)))
+                .collect(),
         }
     }
 
@@ -233,7 +238,7 @@ impl<A: BRBAlgorithm> DeterministicBRB<A> {
                 // with the proof of agreement. Our signature will prevent tampering.
                 let sig = self.membership.id.sign(&msg)?;
                 let validation = Op::SignedValidated { msg, sig };
-                Ok(vec![self.send(source, validation)?])
+                Ok(vec![self.send(source, Payload::BRB(validation))?])
             }
             Op::SignedValidated { msg, sig } => {
                 println!("[DSB] signed validated");
@@ -258,7 +263,10 @@ impl<A: BRBAlgorithm> DeterministicBRB<A> {
                     // e.g. this happens if we request to join the network.
                     let recipients = &self.membership.members(msg.gen).unwrap()
                         | &vec![self.actor()].into_iter().collect();
-                    self.broadcast(&Op::ProofOfAgreement { msg, proof }, recipients)
+                    self.broadcast(
+                        &Payload::BRB(Op::ProofOfAgreement { msg, proof }),
+                        recipients,
+                    )
                 } else {
                     Ok(vec![])
                 }
@@ -391,7 +399,7 @@ impl<A: BRBAlgorithm> DeterministicBRB<A> {
         };
 
         println!("[DSB] {} initiating bft for msg {:?}", self.actor(), msg);
-        self.broadcast(&Op::RequestValidation { msg }, self.peers()?)
+        self.broadcast(&Payload::BRB(Op::RequestValidation { msg }), self.peers()?)
     }
 
     fn quorum(&self, n: usize, gen: Generation) -> Result<bool, Error> {
@@ -400,19 +408,18 @@ impl<A: BRBAlgorithm> DeterministicBRB<A> {
 
     fn broadcast(
         &self,
-        op: &Op<A::Op>,
+        payload: &Payload<A::Op>,
         targets: BTreeSet<Actor>,
     ) -> Result<Vec<Packet<A::Op>>, Error> {
         println!("[DSB] broadcasting {}->{:?}", self.actor(), targets);
 
         targets
             .into_iter()
-            .map(|dest_p| self.send(dest_p, op.clone()))
+            .map(|dest_p| self.send(dest_p, payload.clone()))
             .collect()
     }
 
-    fn send(&self, dest: Actor, op: Op<A::Op>) -> Result<Packet<A::Op>, Error> {
-        let payload = Payload::BRB(op);
+    fn send(&self, dest: Actor, payload: Payload<A::Op>) -> Result<Packet<A::Op>, Error> {
         let sig = self.membership.id.sign(&payload)?;
         Ok(Packet {
             source: self.actor(),
