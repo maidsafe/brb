@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
+use brb_membership;
 
-use crate::actor::{Actor, Sig};
-use crate::bft_membership;
+use crate::{Actor, Sig};
 use crate::deterministic_brb;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -15,5 +15,5 @@ pub struct Packet<Op> {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Payload<AlgoOp> {
     BRB(deterministic_brb::Op<AlgoOp>),
-    Membership(bft_membership::Vote),
+    Membership(brb_membership::Vote),
 }

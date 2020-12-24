@@ -1,11 +1,10 @@
 /// An implementation of deterministic SecureBroadcast.
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
-use crate::actor::{Actor, Sig};
-use crate::bft_membership::{self, Generation};
 use crate::brb_algorithm::BRBAlgorithm;
 use crate::packet::{Packet, Payload};
 
+use brb_membership::{self, Generation, Actor, Sig};
 use crdts::{CmRDT, CvRDT, Dot, VClock};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -13,7 +12,7 @@ use thiserror::Error;
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("error while processing membership change")]
-    Membership(#[from] bft_membership::Error),
+    Membership(#[from] brb_membership::Error),
     #[error("Failed to serialize all or part of a packet")]
     Encoding(#[from] bincode::Error),
     #[error("Packet failed validation")]
@@ -66,7 +65,7 @@ pub enum Validation {
 #[derive(Debug)]
 pub struct DeterministicBRB<A: BRBAlgorithm> {
     // The identity of a process
-    pub membership: bft_membership::State,
+    pub membership: brb_membership::State,
 
     // Msgs this process has initiated and is waiting on BFT agreement for from the network.
     pub pending_proof: HashMap<Msg<A::Op>, BTreeMap<Actor, Sig>>,
@@ -123,7 +122,7 @@ impl<AlgoOp> Payload<AlgoOp> {
 
 impl<A: BRBAlgorithm> DeterministicBRB<A> {
     pub fn new() -> Self {
-        let membership = bft_membership::State::default();
+        let membership = brb_membership::State::default();
         let algo = A::new(membership.id.actor());
         Self {
             membership,
@@ -158,7 +157,7 @@ impl<A: BRBAlgorithm> DeterministicBRB<A> {
 
     pub fn request_membership(&mut self, actor: Actor) -> Result<Vec<Packet<A::Op>>, Error> {
         self.membership
-            .propose(bft_membership::Reconfig::Join(actor))?
+            .propose(brb_membership::Reconfig::Join(actor))?
             .into_iter()
             .map(|vote_msg| self.send(vote_msg.dest, Payload::Membership(vote_msg.vote)))
             .collect()
@@ -166,7 +165,7 @@ impl<A: BRBAlgorithm> DeterministicBRB<A> {
 
     pub fn kill_peer(&mut self, actor: Actor) -> Result<Vec<Packet<A::Op>>, Error> {
         self.membership
-            .propose(bft_membership::Reconfig::Leave(actor))?
+            .propose(brb_membership::Reconfig::Leave(actor))?
             .into_iter()
             .map(|vote_msg| self.send(vote_msg.dest, Payload::Membership(vote_msg.vote)))
             .collect()

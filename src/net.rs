@@ -3,7 +3,7 @@ use std::collections::{BTreeSet, HashMap};
 use std::fs::File;
 use std::io::Write;
 
-use crate::actor::Actor;
+use crate::Actor;
 use crate::brb_algorithm::BRBAlgorithm;
 use crate::deterministic_brb::DeterministicBRB;
 use crate::packet::Packet;

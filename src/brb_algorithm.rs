@@ -3,7 +3,7 @@ use std::hash::Hash;
 
 use serde::Serialize;
 
-use crate::actor::Actor;
+use crate::Actor;
 
 pub trait BRBAlgorithm: Clone + Debug + Eq {
     type Op: Debug + Clone + Hash + Eq + Serialize;
