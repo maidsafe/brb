@@ -120,7 +120,7 @@ impl<A: BRBAlgorithm> Net<A> {
         self.on_proc_mut(&dest, |p| p.handle_packet(packet))
             .unwrap_or_else(|| Ok(vec![])) // no proc to deliver too
             .unwrap_or_else(|err| {
-                println!("[DSB] Rejected packet: {:?}", err);
+                println!("[BRB] Rejected packet: {:?}", err);
                 let count = self.invalid_packets.entry(dest).or_default();
                 *count += 1;
                 vec![]
