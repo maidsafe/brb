@@ -12,5 +12,5 @@ pub use net::Net;
 pub mod packet;
 pub use packet::{Packet, Payload};
 
-pub mod brb_algorithm;
-pub use brb_algorithm::BRBAlgorithm;
+pub mod brb_data_type;
+pub use brb_data_type::BRBDataType;
