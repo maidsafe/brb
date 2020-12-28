@@ -16,6 +16,12 @@ pub struct Net<A: BRBDataType> {
     pub invalid_packets: HashMap<Actor, u64>,
 }
 
+impl<A: BRBDataType> Default for Net<A> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<A: BRBDataType> Net<A> {
     pub fn new() -> Self {
         Self {
@@ -115,7 +121,7 @@ impl<A: BRBDataType> Net<A> {
     pub fn deliver_packet(&mut self, packet: Packet<A::Op>) -> Vec<Packet<A::Op>> {
         println!("[NET] packet {}->{}", packet.source, packet.dest);
         self.n_packets += 1;
-        let dest = packet.dest.clone();
+        let dest = packet.dest;
         self.delivered_packets.push(packet.clone());
         self.on_proc_mut(&dest, |p| p.handle_packet(packet))
             .unwrap_or_else(|| Ok(vec![])) // no proc to deliver too

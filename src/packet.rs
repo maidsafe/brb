@@ -1,4 +1,3 @@
-use brb_membership;
 use serde::{Deserialize, Serialize};
 
 use crate::deterministic_brb;
@@ -15,5 +14,6 @@ pub struct Packet<Op> {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Payload<AlgoOp> {
     BRB(deterministic_brb::Op<AlgoOp>),
-    Membership(brb_membership::Vote),
+    // Box to avoid https://rust-lang.github.io/rust-clippy/master/index.html#large_enum_variant
+    Membership(Box<brb_membership::Vote>),
 }
