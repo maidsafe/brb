@@ -1,8 +1,8 @@
-use serde::{Deserialize, Serialize};
 use brb_membership;
+use serde::{Deserialize, Serialize};
 
-use crate::{Actor, Sig};
 use crate::deterministic_brb;
+use crate::{Actor, Sig};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Packet<Op> {

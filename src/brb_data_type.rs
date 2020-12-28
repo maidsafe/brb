@@ -5,7 +5,7 @@ use serde::Serialize;
 
 use crate::Actor;
 
-pub trait BRBAlgorithm: Clone + Debug + Eq {
+pub trait BRBDataType: Clone + Debug + Eq {
     type Op: Debug + Clone + Hash + Eq + Serialize;
     type ReplicatedState: Clone + Debug + Eq;
 

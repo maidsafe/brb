@@ -3,20 +3,20 @@ use std::collections::{BTreeSet, HashMap};
 use std::fs::File;
 use std::io::Write;
 
-use crate::Actor;
-use crate::brb_algorithm::BRBAlgorithm;
+use crate::brb_data_type::BRBDataType;
 use crate::deterministic_brb::DeterministicBRB;
 use crate::packet::Packet;
+use crate::Actor;
 
 #[derive(Debug)]
-pub struct Net<A: BRBAlgorithm> {
+pub struct Net<A: BRBDataType> {
     pub procs: Vec<DeterministicBRB<A>>,
     pub delivered_packets: Vec<Packet<A::Op>>,
     pub n_packets: u64,
     pub invalid_packets: HashMap<Actor, u64>,
 }
 
-impl<A: BRBAlgorithm> Net<A> {
+impl<A: BRBDataType> Net<A> {
     pub fn new() -> Self {
         Self {
             procs: Vec::new(),

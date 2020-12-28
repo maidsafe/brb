@@ -1,10 +1,10 @@
 /// An implementation of deterministic SecureBroadcast.
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
-use crate::brb_algorithm::BRBAlgorithm;
+use crate::brb_data_type::BRBDataType;
 use crate::packet::{Packet, Payload};
 
-use brb_membership::{self, Generation, Actor, Sig};
+use brb_membership::{self, Actor, Generation, Sig};
 use crdts::{CmRDT, CvRDT, Dot, VClock};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -63,7 +63,7 @@ pub enum Validation {
 }
 
 #[derive(Debug)]
-pub struct DeterministicBRB<A: BRBAlgorithm> {
+pub struct DeterministicBRB<A: BRBDataType> {
     // The identity of a process
     pub membership: brb_membership::State,
 
@@ -84,7 +84,7 @@ pub struct DeterministicBRB<A: BRBAlgorithm> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ReplicatedState<A: BRBAlgorithm> {
+pub struct ReplicatedState<A: BRBDataType> {
     pub algo_state: A::ReplicatedState,
     pub delivered: VClock<Actor>,
 }
@@ -120,7 +120,7 @@ impl<AlgoOp> Payload<AlgoOp> {
     }
 }
 
-impl<A: BRBAlgorithm> DeterministicBRB<A> {
+impl<A: BRBDataType> DeterministicBRB<A> {
     pub fn new() -> Self {
         let membership = brb_membership::State::default();
         let algo = A::new(membership.id.actor());
