@@ -113,10 +113,13 @@ pub enum Op<AlgoOp> {
 
 impl<AlgoOp> Payload<AlgoOp> {
     pub fn is_proof_of_agreement(&self) -> bool {
-        match self {
-            Payload::BRB(Op::ProofOfAgreement { .. }) => true,
-            _ => false,
-        }
+        matches!(self, Payload::BRB(Op::ProofOfAgreement { .. }))
+    }
+}
+
+impl<A: BRBDataType> Default for DeterministicBRB<A> {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -159,7 +162,7 @@ impl<A: BRBDataType> DeterministicBRB<A> {
         self.membership
             .propose(brb_membership::Reconfig::Join(actor))?
             .into_iter()
-            .map(|vote_msg| self.send(vote_msg.dest, Payload::Membership(vote_msg.vote)))
+            .map(|vote_msg| self.send(vote_msg.dest, Payload::Membership(Box::new(vote_msg.vote))))
             .collect()
     }
 
@@ -167,7 +170,7 @@ impl<A: BRBDataType> DeterministicBRB<A> {
         self.membership
             .propose(brb_membership::Reconfig::Leave(actor))?
             .into_iter()
-            .map(|vote_msg| self.send(vote_msg.dest, Payload::Membership(vote_msg.vote)))
+            .map(|vote_msg| self.send(vote_msg.dest, Payload::Membership(Box::new(vote_msg.vote))))
             .collect()
     }
 
@@ -213,12 +216,14 @@ impl<A: BRBDataType> DeterministicBRB<A> {
     fn process_packet(&mut self, packet: Packet<A::Op>) -> Result<Vec<Packet<A::Op>>, Error> {
         match packet.payload {
             Payload::BRB(op) => self.process_secure_broadcast_op(packet.source, op),
-            Payload::Membership(vote) => self
+            Payload::Membership(boxed_vote) => self
                 .membership
-                .handle_vote(vote)
+                .handle_vote(*boxed_vote)
                 .map_err(Error::Membership)?
                 .into_iter()
-                .map(|vote_msg| self.send(vote_msg.dest, Payload::Membership(vote_msg.vote)))
+                .map(|vote_msg| {
+                    self.send(vote_msg.dest, Payload::Membership(Box::new(vote_msg.vote)))
+                })
                 .collect(),
         }
     }
@@ -315,10 +320,7 @@ impl<A: BRBDataType> DeterministicBRB<A> {
         match op {
             Op::RequestValidation { msg } => {
                 if from != msg.dot.actor {
-                    Err(Validation::PacketSourceIsNotDot {
-                        from,
-                        dot: msg.dot.clone(),
-                    })
+                    Err(Validation::PacketSourceIsNotDot { from, dot: msg.dot })
                 } else if msg.dot != self.received.inc(from) {
                     Err(Validation::MsgDotNotTheNextDot {
                         msg_dot: msg.dot,
@@ -362,7 +364,7 @@ impl<A: BRBDataType> DeterministicBRB<A> {
                 let msg_members = self.membership.members(msg.gen)?;
                 if self.delivered.inc(from) != msg.dot {
                     Err(Validation::MsgDotNotNextDotToBeDelivered {
-                        msg_dot: msg.dot.clone(),
+                        msg_dot: msg.dot,
                         expected_dot: self.delivered.inc(from),
                     })
                 } else if !self.quorum(proof.len(), msg.gen)? {
