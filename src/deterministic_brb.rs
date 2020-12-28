@@ -151,7 +151,7 @@ impl<A: BRBAlgorithm> DeterministicBRB<A> {
     }
 
     pub fn trust_peer(&mut self, peer: Actor) {
-        println!("[DSB] {:?} is trusting {:?}", self.actor(), peer);
+        println!("[BRB] {:?} is trusting {:?}", self.actor(), peer);
         self.membership.trust(peer);
     }
 
@@ -177,7 +177,7 @@ impl<A: BRBAlgorithm> DeterministicBRB<A> {
         // once the list of proofs becomes large enough, collapse these proofs into the next snapshot.
         //
         // During onboarding, ship the last snapshot together with it's proof of agreement and the subsequent list of proofs of agreement msgs.
-        println!("[DSB] {} syncing", self.actor());
+        println!("[BRB] {} syncing", self.actor());
         self.delivered.merge(state.delivered.clone());
         self.received.merge(state.delivered); // We advance received up to what we've delivered
         self.algo.sync_from(state.algo_state);
@@ -190,7 +190,7 @@ impl<A: BRBAlgorithm> DeterministicBRB<A> {
         if let Some(op) = f(&self.algo) {
             self.exec_op(op)
         } else {
-            println!("[DSB] algo did not produce an op");
+            println!("[BRB] algo did not produce an op");
             Ok(vec![])
         }
     }
@@ -201,7 +201,7 @@ impl<A: BRBAlgorithm> DeterministicBRB<A> {
 
     pub fn handle_packet(&mut self, packet: Packet<A::Op>) -> Result<Vec<Packet<A::Op>>, Error> {
         println!(
-            "[DSB] handling packet from {}->{}",
+            "[BRB] handling packet from {}->{}",
             packet.source,
             self.actor()
         );
@@ -230,7 +230,7 @@ impl<A: BRBAlgorithm> DeterministicBRB<A> {
     ) -> Result<Vec<Packet<A::Op>>, Error> {
         match op {
             Op::RequestValidation { msg } => {
-                println!("[DSB] request for validation");
+                println!("[BRB] request for validation");
                 self.received.apply(msg.dot);
 
                 // NOTE: we do not need to store this message, it will be sent back to us
@@ -240,7 +240,7 @@ impl<A: BRBAlgorithm> DeterministicBRB<A> {
                 Ok(vec![self.send(source, Payload::BRB(validation))?])
             }
             Op::SignedValidated { msg, sig } => {
-                println!("[DSB] signed validated");
+                println!("[BRB] signed validated");
                 self.pending_proof
                     .entry(msg.clone())
                     .or_default()
@@ -253,7 +253,7 @@ impl<A: BRBAlgorithm> DeterministicBRB<A> {
                 if self.quorum(num_signatures, msg.gen)?
                     && !self.quorum(num_signatures - 1, msg.gen)?
                 {
-                    println!("[DSB] we have quorum over msg, sending proof to network");
+                    println!("[BRB] we have quorum over msg, sending proof to network");
                     // We have quorum, broadcast proof of agreement to network
                     let proof = self.pending_proof[&msg].clone();
 
@@ -271,7 +271,7 @@ impl<A: BRBAlgorithm> DeterministicBRB<A> {
                 }
             }
             Op::ProofOfAgreement { msg, .. } => {
-                println!("[DSB] proof of agreement: {:?}", msg);
+                println!("[BRB] proof of agreement: {:?}", msg);
                 // We may not have been in the subset of members to validate this clock
                 // so we may not have had the chance to increment received. We must bring
                 // received up to this msg's timestamp.
@@ -294,7 +294,7 @@ impl<A: BRBAlgorithm> DeterministicBRB<A> {
     fn validate_packet(&self, packet: &Packet<A::Op>) -> Result<(), Error> {
         if !packet.source.verify(&packet.payload, &packet.sig)? {
             println!(
-                "[DSB/SIG] Msg failed signature verification {}->{}",
+                "[BRB/SIG] Msg failed signature verification {}->{}",
                 packet.source,
                 self.actor(),
             );
@@ -397,7 +397,7 @@ impl<A: BRBAlgorithm> DeterministicBRB<A> {
             dot: self.received.inc(self.actor()),
         };
 
-        println!("[DSB] {} initiating bft for msg {:?}", self.actor(), msg);
+        println!("[BRB] {} initiating bft for msg {:?}", self.actor(), msg);
         self.broadcast(&Payload::BRB(Op::RequestValidation { msg }), self.peers()?)
     }
 
@@ -410,7 +410,7 @@ impl<A: BRBAlgorithm> DeterministicBRB<A> {
         payload: &Payload<A::Op>,
         targets: BTreeSet<Actor>,
     ) -> Result<Vec<Packet<A::Op>>, Error> {
-        println!("[DSB] broadcasting {}->{:?}", self.actor(), targets);
+        println!("[BRB] broadcasting {}->{:?}", self.actor(), targets);
 
         targets
             .into_iter()
