@@ -13,6 +13,10 @@ pub struct Packet<Op> {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Payload<AlgoOp> {
+    AntiEntropy {
+        generation: brb_membership::Generation,
+        delivered: crdts::VClock<Actor>,
+    },
     BRB(deterministic_brb::Op<AlgoOp>),
     // Box to avoid https://rust-lang.github.io/rust-clippy/master/index.html#large_enum_variant
     Membership(Box<brb_membership::Vote>),

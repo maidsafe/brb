@@ -1,4 +1,4 @@
-/// An implementation of deterministic SecureBroadcast.
+/// An implementation of Byzantine Reliable Broadcast (BRB).
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use crate::brb_data_type::BRBDataType;
@@ -78,6 +78,9 @@ pub struct DeterministicBRB<A: BRBDataType> {
     // The clock representing the most recent msgs we've delivered to the underlying algorithm `algo`.
     pub delivered: VClock<Actor>,
 
+    // History is maintained to onboard new members
+    pub history_from_source: BTreeMap<Actor, Vec<(Msg<A::Op>, BTreeMap<Actor, Sig>)>>,
+
     // The state of the algorithm that we are running BFT over.
     // This can be the causal bank described in AT2, or it can be a CRDT.
     pub algo: A,
@@ -133,6 +136,7 @@ impl<A: BRBDataType> DeterministicBRB<A> {
             pending_proof: Default::default(),
             delivered: Default::default(),
             received: Default::default(),
+            history_from_source: Default::default(),
         }
     }
 
@@ -153,9 +157,14 @@ impl<A: BRBDataType> DeterministicBRB<A> {
             .map_err(Error::Membership)
     }
 
-    pub fn trust_peer(&mut self, peer: Actor) {
-        println!("[BRB] {:?} is trusting {:?}", self.actor(), peer);
-        self.membership.trust(peer);
+    pub fn force_join(&mut self, peer: Actor) {
+        println!("[BRB] {:?} is forcing {:?} to join", self.actor(), peer);
+        self.membership.force_join(peer);
+    }
+
+    pub fn force_leave(&mut self, peer: Actor) {
+        println!("[BRB] {:?} is forcing {:?} to leave", self.actor(), peer);
+        self.membership.force_leave(peer);
     }
 
     pub fn request_membership(&mut self, actor: Actor) -> Result<Vec<Packet<A::Op>>, Error> {
@@ -174,16 +183,13 @@ impl<A: BRBDataType> DeterministicBRB<A> {
             .collect()
     }
 
-    pub fn sync_from(&mut self, state: ReplicatedState<A>) {
-        // TODO: !! there is no validation this state right now.
-        // Suggestion. Periodic BFT agreement on the state snapshot, and procs store all ProofsOfAgreement msgs they've delivered since last snapshot.
-        // once the list of proofs becomes large enough, collapse these proofs into the next snapshot.
-        //
-        // During onboarding, ship the last snapshot together with it's proof of agreement and the subsequent list of proofs of agreement msgs.
-        println!("[BRB] {} syncing", self.actor());
-        self.delivered.merge(state.delivered.clone());
-        self.received.merge(state.delivered); // We advance received up to what we've delivered
-        self.algo.sync_from(state.algo_state);
+    /// Sends an AntiEntropy packet to the given peer
+    pub fn anti_entropy(&self, peer: Actor) -> Result<Packet<A::Op>, Error> {
+        let payload = Payload::AntiEntropy {
+            generation: self.membership.gen,
+            delivered: self.delivered.clone(),
+        };
+        self.send(peer, payload)
     }
 
     pub fn exec_algo_op(
@@ -214,8 +220,42 @@ impl<A: BRBDataType> DeterministicBRB<A> {
     }
 
     fn process_packet(&mut self, packet: Packet<A::Op>) -> Result<Vec<Packet<A::Op>>, Error> {
+        let source = packet.source;
         match packet.payload {
-            Payload::BRB(op) => self.process_secure_broadcast_op(packet.source, op),
+            Payload::AntiEntropy {
+                generation,
+                delivered,
+            } => {
+                let mut packets_to_send = self
+                    .membership
+                    .anti_entropy(generation, source)
+                    .into_iter()
+                    .map(|vote_msg| {
+                        self.send(vote_msg.dest, Payload::Membership(Box::new(vote_msg.vote)))
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+
+                for (actor, msgs) in self.history_from_source.iter() {
+                    let seen_counter = delivered.get(actor);
+                    packets_to_send.extend(
+                        msgs.iter()
+                            .filter(|(msg, _proof)| msg.dot.counter > seen_counter)
+                            .map(|(msg, proof)| {
+                                self.send(
+                                    source,
+                                    Payload::BRB(Op::ProofOfAgreement {
+                                        msg: msg.clone(),
+                                        proof: proof.clone(),
+                                    }),
+                                )
+                            })
+                            .collect::<Result<Vec<_>, _>>()?,
+                    );
+                }
+
+                Ok(packets_to_send)
+            }
+            Payload::BRB(op) => self.process_brb_op(packet.source, op),
             Payload::Membership(boxed_vote) => self
                 .membership
                 .handle_vote(*boxed_vote)
@@ -228,7 +268,7 @@ impl<A: BRBDataType> DeterministicBRB<A> {
         }
     }
 
-    fn process_secure_broadcast_op(
+    fn process_brb_op(
         &mut self,
         source: Actor,
         op: Op<A::Op>,
@@ -275,7 +315,7 @@ impl<A: BRBDataType> DeterministicBRB<A> {
                     Ok(vec![])
                 }
             }
-            Op::ProofOfAgreement { msg, .. } => {
+            Op::ProofOfAgreement { msg, proof } => {
                 println!("[BRB] proof of agreement: {:?}", msg);
                 // We may not have been in the subset of members to validate this clock
                 // so we may not have had the chance to increment received. We must bring
@@ -285,6 +325,12 @@ impl<A: BRBDataType> DeterministicBRB<A> {
                 // from this source.
                 self.received.apply(msg.dot);
                 self.delivered.apply(msg.dot);
+
+                // Log this op in our history with proof
+                self.history_from_source
+                    .entry(source)
+                    .or_default()
+                    .push((msg.clone(), proof.clone()));
 
                 // Apply the op
                 self.algo.apply(msg.op);
@@ -311,12 +357,13 @@ impl<A: BRBDataType> DeterministicBRB<A> {
 
     fn validate_payload(&self, from: Actor, payload: &Payload<A::Op>) -> Result<(), Error> {
         match payload {
-            Payload::BRB(op) => self.validate_secure_broadcast_op(from, op),
+            Payload::AntiEntropy { .. } => Ok(()),
+            Payload::BRB(op) => self.validate_brb_op(from, op),
             Payload::Membership(_) => Ok(()), // membership votes are validated inside membership.handle_vote(..)
         }
     }
 
-    fn validate_secure_broadcast_op(&self, from: Actor, op: &Op<A::Op>) -> Result<(), Error> {
+    fn validate_brb_op(&self, from: Actor, op: &Op<A::Op>) -> Result<(), Error> {
         match op {
             Op::RequestValidation { msg } => {
                 if from != msg.dot.actor {
