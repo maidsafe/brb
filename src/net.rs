@@ -102,17 +102,18 @@ impl<A: BRBDataType> Net<A> {
         // TODO: this should be done through a message passing interface.
         println!("[NET] anti-entropy");
 
-        let peer_map: HashMap<_, _> = self
+        let packets: Vec<_> = self
             .procs
             .iter()
-            .map(|p| (p.actor(), p.peers().unwrap()))
+            .flat_map(|proc| {
+                proc.peers()
+                    .unwrap()
+                    .into_iter()
+                    .map(move |peer| proc.anti_entropy(peer).unwrap())
+            })
             .collect();
-        for (proc, peers) in peer_map {
-            for peer in peers {
-                let peer_state = self.proc_from_actor(&peer).unwrap().state();
-                self.on_proc_mut(&proc, |p| p.sync_from(peer_state));
-            }
-        }
+
+        self.run_packets_to_completion(packets);
     }
 
     /// Delivers a given packet to it's target recipiant.
