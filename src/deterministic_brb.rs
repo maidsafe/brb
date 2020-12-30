@@ -409,10 +409,10 @@ impl<A: BRBDataType> DeterministicBRB<A> {
             }
             Op::ProofOfAgreement { msg, proof } => {
                 let msg_members = self.membership.members(msg.gen)?;
-                if self.delivered.inc(from) != msg.dot {
+                if self.delivered.inc(msg.dot.actor) != msg.dot {
                     Err(Validation::MsgDotNotNextDotToBeDelivered {
                         msg_dot: msg.dot,
-                        expected_dot: self.delivered.inc(from),
+                        expected_dot: self.delivered.inc(msg.dot.actor),
                     })
                 } else if !self.quorum(proof.len(), msg.gen)? {
                     Err(Validation::NotEnoughSignaturesToFormQuorum)
