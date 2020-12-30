@@ -238,6 +238,7 @@ impl<A: BRBDataType> DeterministicBRB<A> {
                 for (actor, msgs) in self.history_from_source.iter() {
                     let seen_counter = delivered.get(actor);
                     packets_to_send.extend(
+                        // TODO: This can be optimized using Vec::binary_search. This is linear in the number of messages.
                         msgs.iter()
                             .filter(|(msg, _proof)| msg.dot.counter > seen_counter)
                             .map(|(msg, proof)| {
