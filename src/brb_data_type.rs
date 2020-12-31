@@ -9,12 +9,12 @@ pub trait BRBDataType: Clone + Debug + Eq {
     type Op: Debug + Clone + Hash + Eq + Serialize;
     type ReplicatedState: Clone + Debug + Eq;
 
-    /// initialize a new replica of this algorithm
+    /// initialize a new replica of this datatype
     fn new(actor: Actor) -> Self;
 
     fn state(&self) -> Self::ReplicatedState;
 
-    /// Called when onboarding a new replica of this algorithm
+    /// Called when onboarding a new replica of this datatype
     fn sync_from(&mut self, other: Self::ReplicatedState);
 
     /// Protection against Byzantines

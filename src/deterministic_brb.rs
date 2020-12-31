@@ -43,8 +43,8 @@ pub enum Validation {
         from: Actor,
         members: BTreeSet<Actor>,
     },
-    #[error("the algorithm failed to validated the operation")]
-    AlgoValidationFailed,
+    #[error("the datatype failed to validated the operation")]
+    DataTypeValidationFailed,
     #[error("Signature is invalid")]
     InvalidSignature,
     #[error("We received a SignedValidated packet for a message we did not request")]
@@ -75,46 +75,46 @@ pub struct DeterministicBRB<A: BRBDataType> {
     // This clock must at all times be greator or equal to the `delivered` clock.
     pub received: VClock<Actor>,
 
-    // The clock representing the most recent msgs we've delivered to the underlying algorithm `algo`.
+    // The clock representing the most recent msgs we've delivered to the underlying datatype `dt`.
     pub delivered: VClock<Actor>,
 
     // History is maintained to onboard new members
     pub history_from_source: BTreeMap<Actor, Vec<(Msg<A::Op>, BTreeMap<Actor, Sig>)>>,
 
-    // The state of the algorithm that we are running BFT over.
+    // The state of the datatype that we are running BFT over.
     // This can be the causal bank described in AT2, or it can be a CRDT.
-    pub algo: A,
+    pub dt: A,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ReplicatedState<A: BRBDataType> {
-    pub algo_state: A::ReplicatedState,
+    pub dt_state: A::ReplicatedState,
     pub delivered: VClock<Actor>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct Msg<AlgoOp> {
+pub struct Msg<DataTypeOp> {
     gen: Generation,
-    op: AlgoOp,
+    op: DataTypeOp,
     dot: Dot<Actor>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub enum Op<AlgoOp> {
+pub enum Op<DataTypeOp> {
     RequestValidation {
-        msg: Msg<AlgoOp>,
+        msg: Msg<DataTypeOp>,
     },
     SignedValidated {
-        msg: Msg<AlgoOp>,
+        msg: Msg<DataTypeOp>,
         sig: Sig,
     },
     ProofOfAgreement {
-        msg: Msg<AlgoOp>,
+        msg: Msg<DataTypeOp>,
         proof: BTreeMap<Actor, Sig>,
     },
 }
 
-impl<AlgoOp> Payload<AlgoOp> {
+impl<DataTypeOp> Payload<DataTypeOp> {
     pub fn is_proof_of_agreement(&self) -> bool {
         matches!(self, Payload::BRB(Op::ProofOfAgreement { .. }))
     }
@@ -129,10 +129,10 @@ impl<A: BRBDataType> Default for DeterministicBRB<A> {
 impl<A: BRBDataType> DeterministicBRB<A> {
     pub fn new() -> Self {
         let membership = brb_membership::State::default();
-        let algo = A::new(membership.id.actor());
+        let dt = A::new(membership.id.actor());
         Self {
             membership,
-            algo,
+            dt,
             pending_proof: Default::default(),
             delivered: Default::default(),
             received: Default::default(),
@@ -146,7 +146,7 @@ impl<A: BRBDataType> DeterministicBRB<A> {
 
     pub fn state(&self) -> ReplicatedState<A> {
         ReplicatedState {
-            algo_state: self.algo.state(),
+            dt_state: self.dt.state(),
             delivered: self.delivered.clone(),
         }
     }
@@ -192,20 +192,20 @@ impl<A: BRBDataType> DeterministicBRB<A> {
         self.send(peer, payload)
     }
 
-    pub fn exec_algo_op(
+    pub fn exec_dt_op(
         &self,
         f: impl FnOnce(&A) -> Option<A::Op>,
     ) -> Result<Vec<Packet<A::Op>>, Error> {
-        if let Some(op) = f(&self.algo) {
+        if let Some(op) = f(&self.dt) {
             self.exec_op(op)
         } else {
-            println!("[BRB] algo did not produce an op");
+            println!("[BRB] datatype did not produce an op");
             Ok(vec![])
         }
     }
 
     pub fn read_state<V>(&self, f: impl FnOnce(&A) -> V) -> V {
-        f(&self.algo)
+        f(&self.dt)
     }
 
     pub fn handle_packet(&mut self, packet: Packet<A::Op>) -> Result<Vec<Packet<A::Op>>, Error> {
@@ -334,7 +334,7 @@ impl<A: BRBDataType> DeterministicBRB<A> {
                     .push((msg.clone(), proof.clone()));
 
                 // Apply the op
-                self.algo.apply(msg.op);
+                self.dt.apply(msg.op);
 
                 // TODO: Once we relax our network assumptions, we must put in an ack
                 // here so that the source knows that honest procs have applied the transaction
@@ -393,8 +393,8 @@ impl<A: BRBDataType> DeterministicBRB<A> {
                         from,
                         members: self.membership.members(self.membership.gen)?,
                     })
-                } else if !self.algo.validate(&from, &msg.op) {
-                    Err(Validation::AlgoValidationFailed)
+                } else if !self.dt.validate(&from, &msg.op) {
+                    Err(Validation::DataTypeValidationFailed)
                 } else {
                     Ok(())
                 }
