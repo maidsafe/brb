@@ -9,25 +9,26 @@ This crate provides a deterministic implementation of Byzantine Reliable Broadca
 
 This crate and its related crates (`brb_*`) implement a loosely-coupled Byzantine Fault Tolerant (BFT) system for achieving network agreement over eventually consistent algorithms.
 
-Each `brb_algo_*` crate provides a particular data type with its own operations that are wrapped in such a way that it can be transferred via BRB.  At present CRDT data types are well suited for this.  We intend to wrap many such data types,with each wrapper in its own crate.
+Each `brb_dt_*` crate provides a particular data type with its own operations that are wrapped in such a way that it can be transferred via BRB.  At present CRDT data types are well suited for this.  We intend to wrap many such data types, with each wrapper in its own crate.
 
 ## BRB Crates
 
-As of this initial writing, the crates are:
+As of this writing, the crates are:
 
 |crate|description|
 |-----|-----------|
 |brb   |this crate. provides brb implementation and SecureBroadcastAlgo trait that brb_algo_* crates implement|
-|[brb_membership](https://github.com/dan-da/brb_membership)|brb dynamic membership: support for peers joining and leaving a brb group|
-|[brb_algo_at2](https://github.com/maidsafe/brb_algo_at2)|The [AT2 algorithm](https://arxiv.org/pdf/1812.10844.pdf) in a brb wrapper|
-|[brb_algo_orswot](https://github.com/maidsafe/brb_algo_orswot)|an brb wrapper for the Orswot CRDT algorithm in [rust-crdt](https://github.com/rust-crdt/rust-crdt/)|
+|[brb_membership](https://github.com/maidsafe/brb_membership)|BRB dynamic membership: support for peers joining and leaving a BRB group|
+|[brb_dt_at2](https://github.com/maidsafe/brb_dt_at2)|The [AT2 algorithm](https://arxiv.org/pdf/1812.10844.pdf) in a BRB wrapper|
+|[brb_dt_orswot](https://github.com/maidsafe/brb_dt_orswot)|A BRB wrapper for the Orswot CRDT algorithm in [rust-crdt](https://github.com/rust-crdt/rust-crdt/)|
+|[brb_node_qp2p](https://github.com/maidsafe/brb_node_qp2p)|P2P node (CLI) for using BRB over Quic protocol via [qp2p](https://github.com/maidsafe/qp2p)|
 
 
 ## Traits
 
 trait | description
 ----- | -----------
-|[SecureBroadcastAlgorithm](src/secure_broadcast_algorithm.rs)| Data types to be secured should impl this|
+|[BRBDataType](src/brb_data_type.rs)| Data types to be secured should implement this|
 
 ## Prior Work
 
