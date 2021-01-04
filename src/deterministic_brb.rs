@@ -5,7 +5,7 @@ use crate::brb_data_type::BRBDataType;
 use crate::packet::{Packet, Payload};
 
 use brb_membership::{self, Actor, Generation, Sig};
-use crdts::{CmRDT, CvRDT, Dot, VClock};
+use crdts::{CmRDT, Dot, VClock};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -79,6 +79,7 @@ pub struct DeterministicBRB<A: BRBDataType> {
     pub delivered: VClock<Actor>,
 
     // History is maintained to onboard new members
+    #[allow(clippy::type_complexity)]
     pub history_from_source: BTreeMap<Actor, Vec<(Msg<A::Op>, BTreeMap<Actor, Sig>)>>,
 
     // The state of the datatype that we are running BFT over.
@@ -331,7 +332,7 @@ impl<A: BRBDataType> DeterministicBRB<A> {
                 self.history_from_source
                     .entry(source)
                     .or_default()
-                    .push((msg.clone(), proof.clone()));
+                    .push((msg.clone(), proof));
 
                 // Apply the op
                 self.dt.apply(msg.op);
