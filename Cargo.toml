@@ -15,7 +15,5 @@ hex = "0.4.2"
 thiserror = "1.0"
 brb_membership = { git = "https://github.com/maidsafe/brb_membership.git", branch="master" }
 
-#[profile.test]
-#opt-level = 3
-#lto = "fat"
-#incremental = false
+[profile.test]
+opt-level = 3
