@@ -136,11 +136,12 @@ impl<A: BRBDataType> Net<A> {
 
     /// Checks if all members of the network have converged to the same state.
     pub fn members_are_in_agreement(&self) -> bool {
+        // Procs are in agreement if the their op histories are identical
         let mut member_states_iter = self
             .members()
             .into_iter()
             .flat_map(|actor| self.proc_from_actor(&actor))
-            .map(|p| p.state());
+            .map(|p| &p.history_from_source);
 
         if let Some(reference_state) = member_states_iter.next() {
             member_states_iter.all(|s| s == reference_state)
