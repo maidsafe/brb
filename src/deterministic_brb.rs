@@ -87,12 +87,6 @@ pub struct DeterministicBRB<A: BRBDataType> {
     pub dt: A,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ReplicatedState<A: BRBDataType> {
-    pub dt_state: A::ReplicatedState,
-    pub delivered: VClock<Actor>,
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Msg<DataTypeOp> {
     gen: Generation,
@@ -145,13 +139,6 @@ impl<A: BRBDataType> DeterministicBRB<A> {
         self.membership.id.actor()
     }
 
-    pub fn state(&self) -> ReplicatedState<A> {
-        ReplicatedState {
-            dt_state: self.dt.state(),
-            delivered: self.delivered.clone(),
-        }
-    }
-
     pub fn peers(&self) -> Result<BTreeSet<Actor>, Error> {
         self.membership
             .members(self.membership.gen)
@@ -193,20 +180,17 @@ impl<A: BRBDataType> DeterministicBRB<A> {
         self.send(peer, payload)
     }
 
-    pub fn exec_dt_op(
-        &self,
-        f: impl FnOnce(&A) -> Option<A::Op>,
-    ) -> Result<Vec<Packet<A::Op>>, Error> {
-        if let Some(op) = f(&self.dt) {
-            self.exec_op(op)
-        } else {
-            println!("[BRB] datatype did not produce an op");
-            Ok(vec![])
-        }
-    }
+    pub fn exec_op(&self, op: A::Op) -> Result<Vec<Packet<A::Op>>, Error> {
+        let msg = Msg {
+            op,
+            gen: self.membership.gen,
+            // We use the received clock to allow for many operations from this process
+            // to be pending agreement at any one point in time.
+            dot: self.received.inc(self.actor()),
+        };
 
-    pub fn read_state<V>(&self, f: impl FnOnce(&A) -> V) -> V {
-        f(&self.dt)
+        println!("[BRB] {} initiating bft for msg {:?}", self.actor(), msg);
+        self.broadcast(&Payload::BRB(Op::RequestValidation { msg }), self.peers()?)
     }
 
     pub fn handle_packet(&mut self, packet: Packet<A::Op>) -> Result<Vec<Packet<A::Op>>, Error> {
@@ -437,19 +421,6 @@ impl<A: BRBDataType> DeterministicBRB<A> {
             }
         }
         .map_err(Error::Validation)
-    }
-
-    fn exec_op(&self, op: A::Op) -> Result<Vec<Packet<A::Op>>, Error> {
-        let msg = Msg {
-            op,
-            gen: self.membership.gen,
-            // We use the received clock to allow for many operations from this process
-            // to be pending agreement at any one point in time.
-            dot: self.received.inc(self.actor()),
-        };
-
-        println!("[BRB] {} initiating bft for msg {:?}", self.actor(), msg);
-        self.broadcast(&Payload::BRB(Op::RequestValidation { msg }), self.peers()?)
     }
 
     fn quorum(&self, n: usize, gen: Generation) -> Result<bool, Error> {
