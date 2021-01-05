@@ -314,7 +314,7 @@ impl<A: BRBDataType> DeterministicBRB<A> {
 
                 // Log this op in our history with proof
                 self.history_from_source
-                    .entry(source)
+                    .entry(msg.dot.actor)
                     .or_default()
                     .push((msg.clone(), proof));
 
