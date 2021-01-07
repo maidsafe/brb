@@ -19,8 +19,9 @@ As of this writing, the crates are:
 |-----|-----------|
 |brb   |this crate. provides brb implementation and SecureBroadcastAlgo trait that brb_algo_* crates implement|
 |[brb_membership](https://github.com/maidsafe/brb_membership)|BRB dynamic membership: support for peers joining and leaving a BRB group|
-|[brb_dt_at2](https://github.com/maidsafe/brb_dt_at2)|The [AT2 algorithm](https://arxiv.org/pdf/1812.10844.pdf) in a BRB wrapper|
-|[brb_dt_orswot](https://github.com/maidsafe/brb_dt_orswot)|A BRB wrapper for the Orswot CRDT algorithm in [rust-crdt](https://github.com/rust-crdt/rust-crdt/)|
+|[brb_dt_at2](https://github.com/maidsafe/brb_dt_at2)|An implementation of the [AT2 algorithm](https://arxiv.org/pdf/1812.10844.pdf) in a BRB DataType wrapper|
+|[brb_dt_orswot](https://github.com/maidsafe/brb_dt_orswot)|A BRB DataType wrapper for the Orswot CRDT algorithm in [rust-crdt](https://github.com/rust-crdt/rust-crdt/)|
+|[brb_dt_tree](https://github.com/maidsafe/brb_dt_tree)|A BRB DataType wrapper for the Tree CRDT algorithm in [crdt_tree](https://github.com/maidsafe/crdt_tree/)|
 |[brb_node_qp2p](https://github.com/maidsafe/brb_node_qp2p)|P2P node (CLI) for using BRB over Quic protocol via [qp2p](https://github.com/maidsafe/qp2p)|
 
 
