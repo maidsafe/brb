@@ -318,11 +318,12 @@ impl<A: BRBDataType> DeterministicBRB<A> {
                     .or_default()
                     .push((msg.clone(), proof));
 
+                // Remove the message from pending_proof since we now have proof
+                self.pending_proof.remove(&msg);
+
                 // Apply the op
                 self.dt.apply(msg.op);
 
-                // TODO: Once we relax our network assumptions, we must put in an ack
-                // here so that the source knows that honest procs have applied the transaction
                 Ok(vec![])
             }
         }
