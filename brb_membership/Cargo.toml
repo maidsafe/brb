@@ -1,0 +1,20 @@
+[package]
+name = "brb_membership"
+version = "0.1.0"
+authors = ["David Rusu <davidrusu.me@gmail.com>"]
+edition = "2018"
+license = "MIT OR BSD-3-Clause"
+
+[dependencies]
+crdts = "4.0.0"
+ed25519 = { version = "1.0.0", package = "ed25519-dalek", features = ["serde"] }
+rand = "0.7.3"
+serde = "1.0.106"
+bincode = "1.2.1"
+hex = "0.4.2"
+thiserror = "1.0"
+
+#[profile.test]
+#opt-level = 3
+#lto = "fat"
+#incremental = false

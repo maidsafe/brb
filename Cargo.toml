@@ -1,19 +1,14 @@
-[package]
-name = "brb"
-version = "0.1.0"
-authors = ["David Rusu <davidrusu.me@gmail.com>"]
-edition = "2018"
-license = "MIT OR BSD-3-Clause"
+[workspace]
 
-[dependencies]
-crdts = "4.0.0"
-ed25519 = { version = "1.0.0", package = "ed25519-dalek", features = ["serde"] }
-rand = "0.7.3"
-serde = "1.0.106"
-bincode = "1.2.1"
-hex = "0.4.2"
-thiserror = "1.0"
-brb_membership = { git = "https://github.com/maidsafe/brb_membership.git", branch="master" }
+members = [
+  "brb",
+  "brb_membership",
+  "brb_dt_at2",
+  "brb_node_qp2p",
+  "brb_dt_orswot",
+  "brb_dt_tree",
+  ]
 
 [profile.test]
 opt-level = 3
+lto = "fat"

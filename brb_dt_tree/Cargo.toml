@@ -1,0 +1,15 @@
+[package]
+name = "brb_dt_tree"
+version = "0.1.0"
+authors = ["dan-da <dan-da@users.noreply.github.com>"]
+edition = "2018"
+license = "MIT OR BSD-3-Clause"
+
+[dependencies]
+crdt_tree = "0.0.7"
+brb = { git = "https://github.com/maidsafe/brb.git", branch="master" }
+serde = "1.0.106"
+
+[dev-dependencies]
+quickcheck = "0.9"
+
