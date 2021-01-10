@@ -108,9 +108,9 @@ impl SharedBRB {
         }
     }
 
-    fn read(&self) -> HashSet<Value> {
-        self.brb.lock().unwrap().dt.read()
-    }
+    //     fn read(&self) -> HashSet<Value> {
+    //         self.brb.lock().unwrap().dt.read()
+    //     }
 }
 
 #[derive(Debug)]
@@ -258,7 +258,7 @@ impl Repl {
 
     #[cmd]
     fn read(&mut self, _args: &[String]) -> CommandResult {
-        println!("{:?}", self.state.read());
+        // println!("{:?}", self.state.read());
         Ok(Action::Done)
     }
 
