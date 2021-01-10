@@ -44,3 +44,4 @@ cargo-all.sh
 bindings
 tmp
 *.orig
+Cargo.lock
