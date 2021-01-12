@@ -5,13 +5,11 @@
 
 ## About
 
-This crate provides a deterministic implementation of Byzantine Reliable Broadcast (BRB) with dynamic membership.
+BRB is a Byzantine Fault Tolerant (BFT) system for achieving network agreement over eventually consistent data-type algorithms such as CRDTs.
 
-For an overview how BRB works, please see these [slides](https://docs.google.com/presentation/d/1AZrauwhTYyNz89zQw_cFa9hkqpS6HPkPzNw3Q7Fkscw/edit?usp=sharing).
+For an overview how BRB works, please see these slides. ([pdf](doc/BRB.pdf?raw=true) | [odp](doc/BRB.odp?raw=true)).
 
-This crate and its related crates (`brb_*`) implement a loosely-coupled Byzantine Fault Tolerant (BFT) system for achieving network agreement over eventually consistent data-type algorithms.
-
-Each `brb_dt_*` crate provides a particular data-type with its own operations that are wrapped in such a way that it can be transferred via BRB.  At present AT2 and CRDT data types are well suited for this.  We intend to wrap many such data types, with each wrapper in its own crate.
+This crate and its related crates (`brb_*`) implement a loosely-coupled Byzantine Fault Tolerant (BFT) system for achieving network agreement over eventually consistent data-type algorithms such as CRDTs.
 
 ## BRB Crates
 
@@ -19,13 +17,14 @@ As of this writing, the crates are:
 
 |crate|description|
 |-----|-----------|
-|brb   |this crate. provides brb implementation and BRBDataType trait that brb_dt_* crates implement|
+|[brb](https://github.com/maidsafe/brb)   |this crate. provides BRB implementation and BRBDataType trait that brb_dt_* crates implement|
 |[brb_membership](https://github.com/maidsafe/brb_membership)|BRB dynamic membership: support for peers joining and leaving a BRB group|
 |[brb_dt_at2](https://github.com/maidsafe/brb_dt_at2)|An implementation of the [AT2 algorithm](https://arxiv.org/pdf/1812.10844.pdf) in a BRB DataType wrapper|
 |[brb_dt_orswot](https://github.com/maidsafe/brb_dt_orswot)|A BRB DataType wrapper for the Orswot CRDT algorithm in [rust-crdt](https://github.com/rust-crdt/rust-crdt/)|
 |[brb_dt_tree](https://github.com/maidsafe/brb_dt_tree)|A BRB DataType wrapper for the Tree CRDT algorithm in [crdt_tree](https://github.com/maidsafe/crdt_tree/)|
-|[brb_node_qp2p](https://github.com/maidsafe/brb_node_qp2p)|P2P node (CLI) for using BRB over Quic protocol via [qp2p](https://github.com/maidsafe/qp2p)|
+|[brb_node_qp2p](https://github.com/maidsafe/brb_node_qp2p)|Interactive P2P node (CLI) for using BRB over Quic protocol via [qp2p](https://github.com/maidsafe/qp2p)|
 
+Each `brb_dt_*` crate provides a particular data-type with its own operations that are wrapped in such a way that it can be transferred via BRB.  At present AT2 and CRDT data types are well suited for this.  We intend to wrap many such data types, with each wrapper in its own crate.
 
 ## Traits
 
