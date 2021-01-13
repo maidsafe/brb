@@ -4,7 +4,10 @@
 pub use brb_membership::{Actor, Error as MembershipError, Sig, SigningActor};
 
 pub mod deterministic_brb;
-pub use deterministic_brb::{DeterministicBRB, Error};
+pub use deterministic_brb::DeterministicBRB;
+
+pub mod error;
+pub use error::{Error, ValidationError};
 
 pub mod net;
 pub use net::Net;
