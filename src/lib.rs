@@ -1,6 +1,7 @@
 // #![deny(missing_docs)]
 
 // re-export these
+pub use brb_membership as membership;
 pub use brb_membership::{Actor, Error as MembershipError, Sig, SigningActor};
 
 pub mod deterministic_brb;
