@@ -10,7 +10,6 @@ pub mod error;
 pub use error::{Error, ValidationError};
 
 pub mod net;
-pub use net::Net;
 
 pub mod packet;
 pub use packet::{Packet, Payload};

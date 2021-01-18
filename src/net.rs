@@ -5,24 +5,30 @@ use std::io::Write;
 
 use crate::brb_data_type::BRBDataType;
 use crate::deterministic_brb::DeterministicBRB;
-use crate::packet::Packet;
-use crate::Actor;
+pub use brb_membership::actor::ed25519::{Actor, Sig, SigningActor};
+use brb_membership::SigningActor as SigningActorTrait;
+
+type State<BRBDT> = DeterministicBRB<Actor, SigningActor, Sig, BRBDT>;
+type Packet<BRBDT> = crate::packet::Packet<Actor, Sig, BRBDT>;
+
+pub trait BRBDT: BRBDataType<Actor> {}
+impl<T: BRBDataType<Actor>> BRBDT for T {}
 
 #[derive(Debug)]
-pub struct Net<A: BRBDataType> {
-    pub procs: Vec<DeterministicBRB<A>>,
-    pub delivered_packets: Vec<Packet<A::Op>>,
+pub struct Net<DT: BRBDT> {
+    pub procs: Vec<State<DT>>,
+    pub delivered_packets: Vec<Packet<DT::Op>>,
     pub n_packets: u64,
     pub invalid_packets: HashMap<Actor, u64>,
 }
 
-impl<A: BRBDataType> Default for Net<A> {
+impl<DT: BRBDT> Default for Net<DT> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<A: BRBDataType> Net<A> {
+impl<DT: BRBDT> Net<DT> {
     pub fn new() -> Self {
         Self {
             procs: Vec::new(),
@@ -64,11 +70,7 @@ impl<A: BRBDataType> Net<A> {
     }
 
     /// Execute arbitrary code on a proc (immutable)
-    pub fn on_proc<V>(
-        &self,
-        actor: &Actor,
-        f: impl FnOnce(&DeterministicBRB<A>) -> V,
-    ) -> Option<V> {
+    pub fn on_proc<V>(&self, actor: &Actor, f: impl FnOnce(&State<DT>) -> V) -> Option<V> {
         self.proc_from_actor(actor).map(|p| f(p))
     }
 
@@ -76,20 +78,20 @@ impl<A: BRBDataType> Net<A> {
     pub fn on_proc_mut<V>(
         &mut self,
         actor: &Actor,
-        f: impl FnOnce(&mut DeterministicBRB<A>) -> V,
+        f: impl FnOnce(&mut State<DT>) -> V,
     ) -> Option<V> {
         self.proc_from_actor_mut(actor).map(|p| f(p))
     }
 
     /// Get a (immutable) reference to a proc with the given actor.
-    pub fn proc_from_actor(&self, actor: &Actor) -> Option<&DeterministicBRB<A>> {
+    pub fn proc_from_actor(&self, actor: &Actor) -> Option<&State<DT>> {
         self.procs
             .iter()
             .find(|secure_p| &secure_p.actor() == actor)
     }
 
     /// Get a (mutable) reference to a proc with the given actor.
-    pub fn proc_from_actor_mut(&mut self, actor: &Actor) -> Option<&mut DeterministicBRB<A>> {
+    pub fn proc_from_actor_mut(&mut self, actor: &Actor) -> Option<&mut State<DT>> {
         self.procs
             .iter_mut()
             .find(|secure_p| &secure_p.actor() == actor)
@@ -119,7 +121,7 @@ impl<A: BRBDataType> Net<A> {
     /// Delivers a given packet to it's target recipiant.
     /// The recipiant, upon processing this packet, may produce it's own packets.
     /// This next set of packets are returned to the caller.
-    pub fn deliver_packet(&mut self, packet: Packet<A::Op>) -> Vec<Packet<A::Op>> {
+    pub fn deliver_packet(&mut self, packet: Packet<DT::Op>) -> Vec<Packet<DT::Op>> {
         println!("[NET] packet {}->{}", packet.source, packet.dest);
         self.n_packets += 1;
         let dest = packet.dest;
@@ -157,7 +159,7 @@ impl<A: BRBDataType> Net<A> {
 
     /// Convenience function to iteratively deliver all packets along with any packets
     /// that may result from delivering a packet.
-    pub fn run_packets_to_completion(&mut self, mut packets: Vec<Packet<A::Op>>) {
+    pub fn run_packets_to_completion(&mut self, mut packets: Vec<Packet<DT::Op>>) {
         while !packets.is_empty() {
             let packet = packets.remove(0);
             packets.extend(self.deliver_packet(packet));
