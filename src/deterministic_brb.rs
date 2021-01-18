@@ -5,6 +5,8 @@ use crate::brb_data_type::BRBDataType;
 use crate::packet::{Packet, Payload};
 use crate::{Error, ValidationError};
 
+use log::info;
+
 use brb_membership::{self, Actor, Generation, Sig, SigningActor};
 use crdts::{CmRDT, Dot, VClock};
 use serde::{Deserialize, Serialize};
@@ -97,12 +99,12 @@ impl<A: Actor<S>, SA: SigningActor<A, S>, S: Sig, BRBDT: BRBDataType<A>>
     }
 
     pub fn force_join(&mut self, peer: A) {
-        println!("[BRB] {:?} is forcing {:?} to join", self.actor(), peer);
+        info!("[BRB] {:?} is forcing {:?} to join", self.actor(), peer);
         self.membership.force_join(peer);
     }
 
     pub fn force_leave(&mut self, peer: A) {
-        println!("[BRB] {:?} is forcing {:?} to leave", self.actor(), peer);
+        info!("[BRB] {:?} is forcing {:?} to leave", self.actor(), peer);
         self.membership.force_leave(peer);
     }
 
@@ -152,7 +154,7 @@ impl<A: Actor<S>, SA: SigningActor<A, S>, S: Sig, BRBDT: BRBDataType<A>>
             dot: self.received.inc(self.actor()),
         };
 
-        println!("[BRB] {} initiating bft for msg {:?}", self.actor(), msg);
+        info!("[BRB] {} initiating bft for msg {:?}", self.actor(), msg);
         self.broadcast(&Payload::BRB(Op::RequestValidation { msg }), self.peers()?)
     }
 
@@ -160,7 +162,7 @@ impl<A: Actor<S>, SA: SigningActor<A, S>, S: Sig, BRBDT: BRBDataType<A>>
         &mut self,
         packet: Packet<A, S, BRBDT::Op>,
     ) -> Result<Vec<Packet<A, S, BRBDT::Op>>, Error<A, S, BRBDT::ValidationError>> {
-        println!(
+        info!(
             "[BRB] handling packet from {}->{}",
             packet.source,
             self.actor()
@@ -230,7 +232,7 @@ impl<A: Actor<S>, SA: SigningActor<A, S>, S: Sig, BRBDT: BRBDataType<A>>
     ) -> Result<Vec<Packet<A, S, BRBDT::Op>>, Error<A, S, BRBDT::ValidationError>> {
         match op {
             Op::RequestValidation { msg } => {
-                println!("[BRB] request for validation");
+                info!("[BRB] request for validation");
                 self.received.apply(msg.dot);
 
                 // NOTE: we do not need to store this message, it will be sent back to us
@@ -240,7 +242,7 @@ impl<A: Actor<S>, SA: SigningActor<A, S>, S: Sig, BRBDT: BRBDataType<A>>
                 Ok(vec![self.send(source, Payload::BRB(validation))?])
             }
             Op::SignedValidated { msg, sig } => {
-                println!("[BRB] signed validated");
+                info!("[BRB] signed validated");
                 self.pending_proof
                     .entry(msg.clone())
                     .or_default()
@@ -253,7 +255,7 @@ impl<A: Actor<S>, SA: SigningActor<A, S>, S: Sig, BRBDT: BRBDataType<A>>
                 if self.quorum(num_signatures, msg.gen)?
                     && !self.quorum(num_signatures - 1, msg.gen)?
                 {
-                    println!("[BRB] we have quorum over msg, sending proof to network");
+                    info!("[BRB] we have quorum over msg, sending proof to network");
                     // We have quorum, broadcast proof of agreement to network
                     let proof = self.pending_proof[&msg].clone();
 
@@ -271,7 +273,7 @@ impl<A: Actor<S>, SA: SigningActor<A, S>, S: Sig, BRBDT: BRBDataType<A>>
                 }
             }
             Op::ProofOfAgreement { msg, proof } => {
-                println!("[BRB] proof of agreement: {:?}", msg);
+                info!("[BRB] proof of agreement: {:?}", msg);
                 // We may not have been in the subset of members to validate this clock
                 // so we may not have had the chance to increment received. We must bring
                 // received up to this msg's timestamp.
@@ -408,7 +410,7 @@ impl<A: Actor<S>, SA: SigningActor<A, S>, S: Sig, BRBDT: BRBDataType<A>>
         payload: &Payload<A, S, BRBDT::Op>,
         targets: BTreeSet<A>,
     ) -> Result<Vec<Packet<A, S, BRBDT::Op>>, Error<A, S, BRBDT::ValidationError>> {
-        println!("[BRB] broadcasting {}->{:?}", self.actor(), targets);
+        info!("[BRB] broadcasting {}->{:?}", self.actor(), targets);
 
         targets
             .into_iter()
