@@ -1,5 +1,6 @@
 use std::collections::{BTreeSet, HashMap};
 
+use log::{info, warn};
 use std::fs::File;
 use std::io::Write;
 
@@ -102,7 +103,7 @@ impl<DT: BRBDT> Net<DT> {
     /// use message passing and we share process state directly.
     pub fn anti_entropy(&mut self) {
         // TODO: this should be done through a message passing interface.
-        println!("[NET] anti-entropy");
+        info!("[NET] anti-entropy");
 
         let packets: Vec<_> = self
             .procs
@@ -122,14 +123,14 @@ impl<DT: BRBDT> Net<DT> {
     /// The recipiant, upon processing this packet, may produce it's own packets.
     /// This next set of packets are returned to the caller.
     pub fn deliver_packet(&mut self, packet: Packet<DT::Op>) -> Vec<Packet<DT::Op>> {
-        println!("[NET] packet {}->{}", packet.source, packet.dest);
+        info!("[NET] packet {}->{}", packet.source, packet.dest);
         self.n_packets += 1;
         let dest = packet.dest;
         self.delivered_packets.push(packet.clone());
         self.on_proc_mut(&dest, |p| p.handle_packet(packet))
             .unwrap_or_else(|| Ok(vec![])) // no proc to deliver too
             .unwrap_or_else(|err| {
-                println!("[BRB] Rejected packet: {:?}", err);
+                warn!("[BRB] Rejected packet: {:?}", err);
                 let count = self.invalid_packets.entry(dest).or_default();
                 *count += 1;
                 vec![]
