@@ -1,3 +1,4 @@
+/// This module provides an in-memory network for simulating BRBDT's running over BRB.
 use std::collections::{BTreeSet, HashMap};
 
 use std::fs::File;
