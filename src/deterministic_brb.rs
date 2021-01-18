@@ -5,73 +5,77 @@ use crate::brb_data_type::BRBDataType;
 use crate::packet::{Packet, Payload};
 use crate::{Error, ValidationError};
 
-use brb_membership::{self, Actor, Generation, Sig};
+use brb_membership::{self, Actor, Generation, Sig, SigningActor};
 use crdts::{CmRDT, Dot, VClock};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug)]
-pub struct DeterministicBRB<A: BRBDataType> {
+pub struct DeterministicBRB<A: Actor<S>, SA: SigningActor<A, S>, S: Sig, BRBDT: BRBDataType<A>> {
     // The identity of a process
-    pub membership: brb_membership::State,
+    pub membership: brb_membership::State<A, SA, S>,
 
     // Msgs this process has initiated and is waiting on BFT agreement for from the network.
-    pub pending_proof: HashMap<Msg<A::Op>, BTreeMap<Actor, Sig>>,
+    pub pending_proof: HashMap<Msg<A, BRBDT::Op>, BTreeMap<A, S>>,
 
     // The clock representing the most recently received messages from each process.
     // These are messages that have been acknowledged but not yet
     // This clock must at all times be greator or equal to the `delivered` clock.
-    pub received: VClock<Actor>,
+    pub received: VClock<A>,
 
     // The clock representing the most recent msgs we've delivered to the underlying datatype `dt`.
-    pub delivered: VClock<Actor>,
+    pub delivered: VClock<A>,
 
     // History is maintained to onboard new members
     #[allow(clippy::type_complexity)]
-    pub history_from_source: BTreeMap<Actor, Vec<(Msg<A::Op>, BTreeMap<Actor, Sig>)>>,
+    pub history_from_source: BTreeMap<A, Vec<(Msg<A, BRBDT::Op>, BTreeMap<A, S>)>>,
 
     // The state of the datatype that we are running BFT over.
     // This can be the causal bank described in AT2, or it can be a CRDT.
-    pub dt: A,
+    pub dt: BRBDT,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct Msg<DataTypeOp> {
+pub struct Msg<A, DataTypeOp> {
     gen: Generation,
     op: DataTypeOp,
-    dot: Dot<Actor>,
+    dot: Dot<A>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub enum Op<DataTypeOp> {
+pub enum Op<A: Ord, S, DataTypeOp> {
     RequestValidation {
-        msg: Msg<DataTypeOp>,
+        msg: Msg<A, DataTypeOp>,
     },
     SignedValidated {
-        msg: Msg<DataTypeOp>,
-        sig: Sig,
+        msg: Msg<A, DataTypeOp>,
+        sig: S,
     },
     ProofOfAgreement {
-        msg: Msg<DataTypeOp>,
-        proof: BTreeMap<Actor, Sig>,
+        msg: Msg<A, DataTypeOp>,
+        proof: BTreeMap<A, S>,
     },
 }
 
-impl<DataTypeOp> Payload<DataTypeOp> {
+impl<A: Actor<S>, S: Sig, DataTypeOp> Payload<A, S, DataTypeOp> {
     pub fn is_proof_of_agreement(&self) -> bool {
         matches!(self, Payload::BRB(Op::ProofOfAgreement { .. }))
     }
 }
 
-impl<A: BRBDataType> Default for DeterministicBRB<A> {
+impl<A: Actor<S>, SA: SigningActor<A, S>, S: Sig, BRBDT: BRBDataType<A>> Default
+    for DeterministicBRB<A, SA, S, BRBDT>
+{
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<A: BRBDataType> DeterministicBRB<A> {
+impl<A: Actor<S>, SA: SigningActor<A, S>, S: Sig, BRBDT: BRBDataType<A>>
+    DeterministicBRB<A, SA, S, BRBDT>
+{
     pub fn new() -> Self {
-        let membership = brb_membership::State::default();
-        let dt = A::new(membership.id.actor());
+        let membership: brb_membership::State<A, SA, S> = Default::default();
+        let dt = BRBDT::new(membership.id.actor());
         Self {
             membership,
             dt,
@@ -82,30 +86,30 @@ impl<A: BRBDataType> DeterministicBRB<A> {
         }
     }
 
-    pub fn actor(&self) -> Actor {
+    pub fn actor(&self) -> A {
         self.membership.id.actor()
     }
 
-    pub fn peers(&self) -> Result<BTreeSet<Actor>, Error<A::ValidationError>> {
+    pub fn peers(&self) -> Result<BTreeSet<A>, Error<A, S, BRBDT::ValidationError>> {
         self.membership
             .members(self.membership.gen)
             .map_err(Error::Membership)
     }
 
-    pub fn force_join(&mut self, peer: Actor) {
+    pub fn force_join(&mut self, peer: A) {
         println!("[BRB] {:?} is forcing {:?} to join", self.actor(), peer);
         self.membership.force_join(peer);
     }
 
-    pub fn force_leave(&mut self, peer: Actor) {
+    pub fn force_leave(&mut self, peer: A) {
         println!("[BRB] {:?} is forcing {:?} to leave", self.actor(), peer);
         self.membership.force_leave(peer);
     }
 
     pub fn request_membership(
         &mut self,
-        actor: Actor,
-    ) -> Result<Vec<Packet<A::Op>>, Error<A::ValidationError>> {
+        actor: A,
+    ) -> Result<Vec<Packet<A, S, BRBDT::Op>>, Error<A, S, BRBDT::ValidationError>> {
         self.membership
             .propose(brb_membership::Reconfig::Join(actor))?
             .into_iter()
@@ -115,8 +119,8 @@ impl<A: BRBDataType> DeterministicBRB<A> {
 
     pub fn kill_peer(
         &mut self,
-        actor: Actor,
-    ) -> Result<Vec<Packet<A::Op>>, Error<A::ValidationError>> {
+        actor: A,
+    ) -> Result<Vec<Packet<A, S, BRBDT::Op>>, Error<A, S, BRBDT::ValidationError>> {
         self.membership
             .propose(brb_membership::Reconfig::Leave(actor))?
             .into_iter()
@@ -125,7 +129,10 @@ impl<A: BRBDataType> DeterministicBRB<A> {
     }
 
     /// Sends an AntiEntropy packet to the given peer
-    pub fn anti_entropy(&self, peer: Actor) -> Result<Packet<A::Op>, Error<A::ValidationError>> {
+    pub fn anti_entropy(
+        &self,
+        peer: A,
+    ) -> Result<Packet<A, S, BRBDT::Op>, Error<A, S, BRBDT::ValidationError>> {
         let payload = Payload::AntiEntropy {
             generation: self.membership.gen,
             delivered: self.delivered.clone(),
@@ -133,7 +140,10 @@ impl<A: BRBDataType> DeterministicBRB<A> {
         self.send(peer, payload)
     }
 
-    pub fn exec_op(&self, op: A::Op) -> Result<Vec<Packet<A::Op>>, Error<A::ValidationError>> {
+    pub fn exec_op(
+        &self,
+        op: BRBDT::Op,
+    ) -> Result<Vec<Packet<A, S, BRBDT::Op>>, Error<A, S, BRBDT::ValidationError>> {
         let msg = Msg {
             op,
             gen: self.membership.gen,
@@ -148,8 +158,8 @@ impl<A: BRBDataType> DeterministicBRB<A> {
 
     pub fn handle_packet(
         &mut self,
-        packet: Packet<A::Op>,
-    ) -> Result<Vec<Packet<A::Op>>, Error<A::ValidationError>> {
+        packet: Packet<A, S, BRBDT::Op>,
+    ) -> Result<Vec<Packet<A, S, BRBDT::Op>>, Error<A, S, BRBDT::ValidationError>> {
         println!(
             "[BRB] handling packet from {}->{}",
             packet.source,
@@ -162,8 +172,8 @@ impl<A: BRBDataType> DeterministicBRB<A> {
 
     fn process_packet(
         &mut self,
-        packet: Packet<A::Op>,
-    ) -> Result<Vec<Packet<A::Op>>, Error<A::ValidationError>> {
+        packet: Packet<A, S, BRBDT::Op>,
+    ) -> Result<Vec<Packet<A, S, BRBDT::Op>>, Error<A, S, BRBDT::ValidationError>> {
         let source = packet.source;
         match packet.payload {
             Payload::AntiEntropy {
@@ -215,9 +225,9 @@ impl<A: BRBDataType> DeterministicBRB<A> {
 
     fn process_brb_op(
         &mut self,
-        source: Actor,
-        op: Op<A::Op>,
-    ) -> Result<Vec<Packet<A::Op>>, Error<A::ValidationError>> {
+        source: A,
+        op: Op<A, S, BRBDT::Op>,
+    ) -> Result<Vec<Packet<A, S, BRBDT::Op>>, Error<A, S, BRBDT::ValidationError>> {
         match op {
             Op::RequestValidation { msg } => {
                 println!("[BRB] request for validation");
@@ -225,7 +235,7 @@ impl<A: BRBDataType> DeterministicBRB<A> {
 
                 // NOTE: we do not need to store this message, it will be sent back to us
                 // with the proof of agreement. Our signature will prevent tampering.
-                let sig = self.membership.id.sign(&msg)?;
+                let sig = self.sign(&msg)?;
                 let validation = Op::SignedValidated { msg, sig };
                 Ok(vec![self.send(source, Payload::BRB(validation))?])
             }
@@ -288,24 +298,19 @@ impl<A: BRBDataType> DeterministicBRB<A> {
         }
     }
 
-    fn validate_packet(&self, packet: &Packet<A::Op>) -> Result<(), Error<A::ValidationError>> {
-        if !packet.source.verify(&packet.payload, &packet.sig)? {
-            println!(
-                "[BRB/SIG] Msg failed signature verification {}->{}",
-                packet.source,
-                self.actor(),
-            );
-            Err(Error::Validation(ValidationError::InvalidSignature))
-        } else {
-            self.validate_payload(packet.source, &packet.payload)
-        }
+    fn validate_packet(
+        &self,
+        packet: &Packet<A, S, BRBDT::Op>,
+    ) -> Result<(), Error<A, S, BRBDT::ValidationError>> {
+        self.verify(&packet.payload, &packet.source, &packet.sig)?;
+        self.validate_payload(packet.source, &packet.payload)
     }
 
     fn validate_payload(
         &self,
-        from: Actor,
-        payload: &Payload<A::Op>,
-    ) -> Result<(), Error<A::ValidationError>> {
+        from: A,
+        payload: &Payload<A, S, BRBDT::Op>,
+    ) -> Result<(), Error<A, S, BRBDT::ValidationError>> {
         match payload {
             Payload::AntiEntropy { .. } => Ok(()),
             Payload::BRB(op) => self.validate_brb_op(from, op),
@@ -315,9 +320,9 @@ impl<A: BRBDataType> DeterministicBRB<A> {
 
     fn validate_brb_op(
         &self,
-        from: Actor,
-        op: &Op<A::Op>,
-    ) -> Result<(), Error<A::ValidationError>> {
+        from: A,
+        op: &Op<A, S, BRBDT::Op>,
+    ) -> Result<(), Error<A, S, BRBDT::ValidationError>> {
         match op {
             Op::RequestValidation { msg } => {
                 if from != msg.dot.actor {
@@ -353,9 +358,9 @@ impl<A: BRBDataType> DeterministicBRB<A> {
                 }
             }
             Op::SignedValidated { msg, sig } => {
-                if !from.verify(&msg, sig)? {
-                    Err(ValidationError::InvalidSignature)
-                } else if self.actor() != msg.dot.actor {
+                self.verify(&msg, &from, sig)?;
+
+                if self.actor() != msg.dot.actor {
                     Err(ValidationError::SignedValidatedForPacketWeDidNotRequest)
                 } else {
                     Ok(())
@@ -377,10 +382,9 @@ impl<A: BRBDataType> DeterministicBRB<A> {
                     Err(ValidationError::ProofContainsSignaturesFromNonMembers)
                 } else if !proof
                     .iter()
-                    .map(|(signer, sig)| signer.verify(&msg, &sig))
-                    .collect::<Result<Vec<bool>, _>>()?
-                    .into_iter()
-                    .all(|v| v)
+                    .map(|(signer, sig)| self.verify(&msg, &signer, &sig))
+                    .collect::<Result<Vec<()>, _>>()
+                    .is_ok()
                 {
                     Err(ValidationError::ProofContainsInvalidSignatures)
                 } else {
@@ -391,15 +395,19 @@ impl<A: BRBDataType> DeterministicBRB<A> {
         .map_err(Error::Validation)
     }
 
-    fn quorum(&self, n: usize, gen: Generation) -> Result<bool, Error<A::ValidationError>> {
+    fn quorum(
+        &self,
+        n: usize,
+        gen: Generation,
+    ) -> Result<bool, Error<A, S, BRBDT::ValidationError>> {
         Ok(n * 3 > self.membership.members(gen)?.len() * 2)
     }
 
     fn broadcast(
         &self,
-        payload: &Payload<A::Op>,
-        targets: BTreeSet<Actor>,
-    ) -> Result<Vec<Packet<A::Op>>, Error<A::ValidationError>> {
+        payload: &Payload<A, S, BRBDT::Op>,
+        targets: BTreeSet<A>,
+    ) -> Result<Vec<Packet<A, S, BRBDT::Op>>, Error<A, S, BRBDT::ValidationError>> {
         println!("[BRB] broadcasting {}->{:?}", self.actor(), targets);
 
         targets
@@ -410,15 +418,31 @@ impl<A: BRBDataType> DeterministicBRB<A> {
 
     fn send(
         &self,
-        dest: Actor,
-        payload: Payload<A::Op>,
-    ) -> Result<Packet<A::Op>, Error<A::ValidationError>> {
-        let sig = self.membership.id.sign(&payload)?;
+        dest: A,
+        payload: Payload<A, S, BRBDT::Op>,
+    ) -> Result<Packet<A, S, BRBDT::Op>, Error<A, S, BRBDT::ValidationError>> {
+        let sig = self.sign(&payload)?;
         Ok(Packet {
             source: self.actor(),
             dest,
             payload,
             sig,
         })
+    }
+
+    fn sign(&self, data: impl Serialize) -> Result<S, Error<A, S, BRBDT::ValidationError>> {
+        let bytes = bincode::serialize(&data)?;
+        Ok(self.membership.id.sign(&bytes))
+    }
+
+    fn verify(
+        &self,
+        data: impl Serialize,
+        signer: &A,
+        sig: &S,
+    ) -> Result<(), Error<A, S, BRBDT::ValidationError>> {
+        let bytes = bincode::serialize(&data)?;
+        signer.verify(&bytes, &sig)?;
+        Ok(())
     }
 }
