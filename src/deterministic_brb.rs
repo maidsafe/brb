@@ -108,6 +108,7 @@ impl<A: Actor<S>, SA: SigningActor<A, S>, S: Sig, BRBDT: BRBDataType<A>>
         self.membership.force_leave(peer);
     }
 
+    #[allow(clippy::type_complexity)]
     pub fn request_membership(
         &mut self,
         actor: A,
@@ -119,6 +120,7 @@ impl<A: Actor<S>, SA: SigningActor<A, S>, S: Sig, BRBDT: BRBDataType<A>>
             .collect()
     }
 
+    #[allow(clippy::type_complexity)]
     pub fn kill_peer(
         &mut self,
         actor: A,
@@ -131,6 +133,7 @@ impl<A: Actor<S>, SA: SigningActor<A, S>, S: Sig, BRBDT: BRBDataType<A>>
     }
 
     /// Sends an AntiEntropy packet to the given peer
+    #[allow(clippy::type_complexity)]
     pub fn anti_entropy(
         &self,
         peer: A,
@@ -142,6 +145,7 @@ impl<A: Actor<S>, SA: SigningActor<A, S>, S: Sig, BRBDT: BRBDataType<A>>
         self.send(peer, payload)
     }
 
+    #[allow(clippy::type_complexity)]
     pub fn exec_op(
         &self,
         op: BRBDT::Op,
@@ -158,6 +162,7 @@ impl<A: Actor<S>, SA: SigningActor<A, S>, S: Sig, BRBDT: BRBDataType<A>>
         self.broadcast(&Payload::BRB(Op::RequestValidation { msg }), self.peers()?)
     }
 
+    #[allow(clippy::type_complexity)]
     pub fn handle_packet(
         &mut self,
         packet: Packet<A, S, BRBDT::Op>,
@@ -172,6 +177,7 @@ impl<A: Actor<S>, SA: SigningActor<A, S>, S: Sig, BRBDT: BRBDataType<A>>
         self.process_packet(packet)
     }
 
+    #[allow(clippy::type_complexity)]
     fn process_packet(
         &mut self,
         packet: Packet<A, S, BRBDT::Op>,
@@ -225,6 +231,7 @@ impl<A: Actor<S>, SA: SigningActor<A, S>, S: Sig, BRBDT: BRBDataType<A>>
         }
     }
 
+    #[allow(clippy::type_complexity)]
     fn process_brb_op(
         &mut self,
         source: A,
@@ -382,11 +389,11 @@ impl<A: Actor<S>, SA: SigningActor<A, S>, S: Sig, BRBDT: BRBDataType<A>>
                     .all(|(signer, _)| msg_members.contains(&signer))
                 {
                     Err(ValidationError::ProofContainsSignaturesFromNonMembers)
-                } else if !proof
+                } else if proof
                     .iter()
                     .map(|(signer, sig)| self.verify(&msg, &signer, &sig))
                     .collect::<Result<Vec<()>, _>>()
-                    .is_ok()
+                    .is_err()
                 {
                     Err(ValidationError::ProofContainsInvalidSignatures)
                 } else {
@@ -405,6 +412,7 @@ impl<A: Actor<S>, SA: SigningActor<A, S>, S: Sig, BRBDT: BRBDataType<A>>
         Ok(n * 3 > self.membership.members(gen)?.len() * 2)
     }
 
+    #[allow(clippy::type_complexity)]
     fn broadcast(
         &self,
         payload: &Payload<A, S, BRBDT::Op>,
@@ -418,6 +426,7 @@ impl<A: Actor<S>, SA: SigningActor<A, S>, S: Sig, BRBDT: BRBDataType<A>>
             .collect()
     }
 
+    #[allow(clippy::type_complexity)]
     fn send(
         &self,
         dest: A,
