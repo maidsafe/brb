@@ -29,10 +29,6 @@ jobs:
           override: true
           components: rustfmt, clippy
 
-      # Generate Cargo.lock, needed for the cache.
-      - name: Generate Cargo.lock
-        run: cargo generate-lockfile
-
       # Cache.
       - name: Cargo cache registry, index and build
         uses: actions/cache@v2
@@ -63,10 +59,6 @@ jobs:
           profile: minimal
           toolchain: stable
           override: true
-
-      # Generate Cargo.lock, needed for the cache.
-      - name: Generate Cargo.lock
-        run: cargo generate-lockfile
 
       # Cache.
       - name: Cargo cache registry, index and build
@@ -110,10 +102,6 @@ jobs:
           toolchain: stable
           override: true
 
-      # Generate Cargo.lock, needed for the cache.
-      - name: Generate lockfile
-        run: cargo generate-lockfile
-
       # Cache.
       - name: Cargo cache registry, index and build
         uses: actions/cache@v2
@@ -143,10 +131,6 @@ jobs:
           toolchain: stable
           override: true
 
-      # Generate Cargo.lock, needed for the cache.
-      - name: Generate lockfile
-        run: cargo generate-lockfile
-
       # Cache.
       - name: Cargo cache registry, index and build
         uses: actions/cache@v2
@@ -174,11 +158,22 @@ jobs:
           override: true
 
       # Install and run cargo udeps to find unused cargo dependencies
-      - name: cargo-udeps duplicate dependency check
+      - name: cargo-udeps unused dependency check
         run: |
           cargo install cargo-udeps --locked
           cargo +nightly udeps --all-targets
 
+  cargo-deny:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+
+    # wget the shared deny.toml file from the QA repo
+    - shell: bash
+      run: wget https://raw.githubusercontent.com/maidsafe/QA/master/misc-scripts/deny.toml
+
+    - uses: EmbarkStudios/cargo-deny-action@v1
+  
   # Test publish using --dry-run.
   test-publish:
     name: Test Publish
