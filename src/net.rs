@@ -1,3 +1,21 @@
+// Copyright 2021 MaidSafe.net limited.
+//
+// This SAFE Network Software is licensed to you under the MIT license <LICENSE-MIT
+// http://opensource.org/licenses/MIT> or the Modified BSD license <LICENSE-BSD
+// https://opensource.org/licenses/BSD-3-Clause>, at your option. This file may not be copied,
+// modified, or distributed except according to those terms. Please review the Licences for the
+// specific language governing permissions and limitations relating to use of the SAFE Network
+// Software.
+
+//! This Net module implements a simulated (in-memory) network using Actors based on
+//! ed25519 keys.
+//!
+//! Net is intended only for use by test cases.  It is public so that it may be used
+//! by test cases in other crates.
+//!
+//! Net may be moved outside the brb crate at a later time.  It should not be used
+//! or relied upon except in test cases.
+
 use std::collections::{BTreeSet, HashMap};
 
 use log::{info, warn};
@@ -9,27 +27,38 @@ use crate::deterministic_brb::DeterministicBRB;
 pub use brb_membership::actor::ed25519::{Actor, Sig, SigningActor};
 use brb_membership::SigningActor as SigningActorTrait;
 
+/// A DeterministicBRB specialized to ed25519 types, for use in simulated Network and test cases.
 type State<BRBDT> = DeterministicBRB<Actor, SigningActor, Sig, BRBDT>;
+
+/// A Packet specialized to ed25519 types, for use in simulated Network and test cases.
 type Packet<BRBDT> = crate::packet::Packet<Actor, Sig, BRBDT>;
 
+/// A BRBDataType specialized to ed25519::Actor, for use in simulated Network and test cases.
 pub trait BRBDT: BRBDataType<Actor> {}
 impl<T: BRBDataType<Actor>> BRBDT for T {}
 
+/// Net -- a simulated in-memory network specialized to ed25519 keys.
 #[derive(Debug)]
 pub struct Net<DT: BRBDT> {
+    /// list of processes/nodes comprising the network.
     pub procs: Vec<State<DT>>,
+    /// list of packets that have been delivered
     pub delivered_packets: Vec<Packet<DT::Op>>,
+    /// total number of packets sent during network's lifetime
     pub n_packets: u64,
+    /// count of invalid packets, by actor.
     pub invalid_packets: HashMap<Actor, u64>,
 }
 
 impl<DT: BRBDT> Default for Net<DT> {
+    /// create a default BRBDT instance
     fn default() -> Self {
         Self::new()
     }
 }
 
 impl<DT: BRBDT> Net<DT> {
+    /// Create a new BRBDT instance
     pub fn new() -> Self {
         Self {
             procs: Vec::new(),
@@ -167,6 +196,9 @@ impl<DT: BRBDT> Net<DT> {
         }
     }
 
+    /// Generates an MSC file representing a packet sequence diagram.
+    /// See http://www.mcternan.me.uk/mscgen/
+    /// See https://github.com/maidsafe/brb_membership#tests
     pub fn generate_msc(&self, chart_name: &str) {
         // See: http://www.mcternan.me.uk/mscgen/
         let mut msc = String::from(

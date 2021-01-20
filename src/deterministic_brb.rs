@@ -1,4 +1,25 @@
-/// An implementation of Byzantine Reliable Broadcast (BRB).
+// Copyright 2021 MaidSafe.net limited.
+//
+// This SAFE Network Software is licensed to you under the MIT license <LICENSE-MIT
+// http://opensource.org/licenses/MIT> or the Modified BSD license <LICENSE-BSD
+// https://opensource.org/licenses/BSD-3-Clause>, at your option. This file may not be copied,
+// modified, or distributed except according to those terms. Please review the Licences for the
+// specific language governing permissions and limitations relating to use of the SAFE Network
+// Software.
+
+//! A Deterministic Implementation of Byzantine Reliable Broadcast (BRB)
+//!
+//! BRB is a Byzantine Fault Tolerant (BFT) system for achieving network agreement over
+//! eventually consistent data-type algorithms such as CRDTs.
+//!
+//! BRB ensures that we will never have a conflicting operation accepted by the network.
+//!
+//! BRB is similar in operation to a 2-phase-commit. It differs in that the underlying
+//! algorithm decides the level of parallelism. The only constraints directly imposed by
+//! BRB are that operations produced by an actor is processed in the order that operations
+//! are created by the actor (source ordering) and that each operation is applied in the
+//! network-agreed-upon generation in which it was created.
+
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use crate::brb_data_type::BRBDataType;
@@ -11,54 +32,72 @@ use brb_membership::{self, Actor, Generation, Sig, SigningActor};
 use crdts::{CmRDT, Dot, VClock};
 use serde::{Deserialize, Serialize};
 
+/// DeterministicBRB -- the heart and soul of BRB.
 #[derive(Debug)]
 pub struct DeterministicBRB<A: Actor<S>, SA: SigningActor<A, S>, S: Sig, BRBDT: BRBDataType<A>> {
-    // The identity of a process
+    /// The identity of a process
     pub membership: brb_membership::State<A, SA, S>,
 
-    // Msgs this process has initiated and is waiting on BFT agreement for from the network.
+    /// Msgs this process has initiated and is waiting on BFT agreement for from the network.
     pub pending_proof: HashMap<Msg<A, BRBDT::Op>, BTreeMap<A, S>>,
 
-    // The clock representing the most recently received messages from each process.
-    // These are messages that have been acknowledged but not yet
-    // This clock must at all times be greator or equal to the `delivered` clock.
+    /// The clock representing the most recently received messages from each process.
+    /// These are messages that have been acknowledged but not yet
+    /// This clock must at all times be greator or equal to the `delivered` clock.
     pub received: VClock<A>,
 
-    // The clock representing the most recent msgs we've delivered to the underlying datatype `dt`.
+    /// The clock representing the most recent msgs we've delivered to the underlying datatype `dt`.
     pub delivered: VClock<A>,
 
-    // History is maintained to onboard new members
+    /// History is maintained to onboard new members
     #[allow(clippy::type_complexity)]
     pub history_from_source: BTreeMap<A, Vec<(Msg<A, BRBDT::Op>, BTreeMap<A, S>)>>,
 
-    // The state of the datatype that we are running BFT over.
-    // This can be the causal bank described in AT2, or it can be a CRDT.
+    /// The state of the datatype that we are running BFT over.
+    /// This can be the causal bank described in AT2, or it can be a CRDT.
     pub dt: BRBDT,
 }
 
+/// A BRB message consisting of an operation to be performed by the DataType we are
+/// securing along with a Generation and a Dot indicating the context when it was created.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Msg<A, DataTypeOp> {
+    /// Generation of Msg creation
     gen: Generation,
+    /// DataType operation
     op: DataTypeOp,
+    /// Dot of Msg creation
     dot: Dot<A>,
 }
 
+/// An enumeration of BRB operations
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Op<A: Ord, S, DataTypeOp> {
+    /// Source Actor is requesting that a peer validate and sign an operation.
     RequestValidation {
+        /// The message to be validated
         msg: Msg<A, DataTypeOp>,
     },
+
+    /// Peer has validated and signed an operation, intended for return to Source Actor
     SignedValidated {
+        /// The validated message
         msg: Msg<A, DataTypeOp>,
+        /// Message signature
         sig: S,
     },
+
+    /// Source Actor is providing proof that a supermajority of members have signed and validated an op.
     ProofOfAgreement {
+        /// the message being agreed upon
         msg: Msg<A, DataTypeOp>,
+        /// A HashSet of message signatures, by Actor.
         proof: BTreeMap<A, S>,
     },
 }
 
 impl<A: Actor<S>, S: Sig, DataTypeOp> Payload<A, S, DataTypeOp> {
+    /// true if this Payload represents an Op::ProofOfAgreement
     pub fn is_proof_of_agreement(&self) -> bool {
         matches!(self, Payload::BRB(Op::ProofOfAgreement { .. }))
     }
@@ -67,6 +106,7 @@ impl<A: Actor<S>, S: Sig, DataTypeOp> Payload<A, S, DataTypeOp> {
 impl<A: Actor<S>, SA: SigningActor<A, S>, S: Sig, BRBDT: BRBDataType<A>> Default
     for DeterministicBRB<A, SA, S, BRBDT>
 {
+    /// returns a default DeterministicBRB
     fn default() -> Self {
         Self::new()
     }
@@ -75,6 +115,7 @@ impl<A: Actor<S>, SA: SigningActor<A, S>, S: Sig, BRBDT: BRBDataType<A>> Default
 impl<A: Actor<S>, SA: SigningActor<A, S>, S: Sig, BRBDT: BRBDataType<A>>
     DeterministicBRB<A, SA, S, BRBDT>
 {
+    /// returns a new DeterministicBRB
     pub fn new() -> Self {
         let membership: brb_membership::State<A, SA, S> = Default::default();
         let dt = BRBDT::new(membership.id.actor());
@@ -88,26 +129,39 @@ impl<A: Actor<S>, SA: SigningActor<A, S>, S: Sig, BRBDT: BRBDataType<A>>
         }
     }
 
+    /// returns the Actor
     pub fn actor(&self) -> A {
         self.membership.id.actor()
     }
 
+    /// returns a set of known peers
     pub fn peers(&self) -> Result<BTreeSet<A>, Error<A, S, BRBDT::ValidationError>> {
         self.membership
             .members(self.membership.gen)
             .map_err(Error::Membership)
     }
 
+    /// Locally adds a peer to voting group without going through the
+    /// regular brb_membership join + voting process.
     pub fn force_join(&mut self, peer: A) {
         info!("[BRB] {:?} is forcing {:?} to join", self.actor(), peer);
         self.membership.force_join(peer);
     }
 
+    /// Locally removes a peer from voting group without going through the
+    /// regular brb_membership leave + voting process.
     pub fn force_leave(&mut self, peer: A) {
         info!("[BRB] {:?} is forcing {:?} to leave", self.actor(), peer);
         self.membership.force_leave(peer);
     }
 
+    /// Proposes membership for an Actor.
+    ///
+    /// The node proposing membership must already be a voting member and
+    /// thus typically will be proposing to add a different non-voting actor.
+    ///
+    /// In other words, a node may not directly propose to add itself, but instead
+    /// must have a sponsor.
     #[allow(clippy::type_complexity)]
     pub fn request_membership(
         &mut self,
@@ -120,6 +174,12 @@ impl<A: Actor<S>, SA: SigningActor<A, S>, S: Sig, BRBDT: BRBDataType<A>>
             .collect()
     }
 
+    /// Proposes that a member be removed from the voting group.
+    ///
+    /// The node proposing membership must already be a voting member and
+    /// may propose that self or another member be removed.
+    ///
+    /// See https://github.com/maidsafe/brb/issues/18
     #[allow(clippy::type_complexity)]
     pub fn kill_peer(
         &mut self,
@@ -132,7 +192,14 @@ impl<A: Actor<S>, SA: SigningActor<A, S>, S: Sig, BRBDT: BRBDataType<A>>
             .collect()
     }
 
-    /// Sends an AntiEntropy packet to the given peer
+    /// Sends an AntiEntropy packet to the given peer, indicating the last
+    /// generation we have seen.
+    ///
+    /// The remote peer should respond with history since our last-seen
+    /// generation to bring our peer up-to-date.
+    ///
+    /// If we have not seen any generation, then this becomes a means to
+    /// bootstrap our node from the "genesis" generation.
     #[allow(clippy::type_complexity)]
     pub fn anti_entropy(
         &self,
@@ -145,6 +212,7 @@ impl<A: Actor<S>, SA: SigningActor<A, S>, S: Sig, BRBDT: BRBDataType<A>>
         self.send(peer, payload)
     }
 
+    /// Initiates an operation for the BRBDataType being secured by BRB.
     #[allow(clippy::type_complexity)]
     pub fn exec_op(
         &self,
@@ -162,6 +230,7 @@ impl<A: Actor<S>, SA: SigningActor<A, S>, S: Sig, BRBDT: BRBDataType<A>>
         self.broadcast(&Payload::BRB(Op::RequestValidation { msg }), self.peers()?)
     }
 
+    /// handles an incoming BRB Packet.
     #[allow(clippy::type_complexity)]
     pub fn handle_packet(
         &mut self,
@@ -177,6 +246,7 @@ impl<A: Actor<S>, SA: SigningActor<A, S>, S: Sig, BRBDT: BRBDataType<A>>
         self.process_packet(packet)
     }
 
+    /// processes an incoming BRB Packet after it has been validated.
     #[allow(clippy::type_complexity)]
     fn process_packet(
         &mut self,
@@ -231,6 +301,7 @@ impl<A: Actor<S>, SA: SigningActor<A, S>, S: Sig, BRBDT: BRBDataType<A>>
         }
     }
 
+    /// processes an incoming BRB operation.
     #[allow(clippy::type_complexity)]
     fn process_brb_op(
         &mut self,
@@ -257,13 +328,13 @@ impl<A: Actor<S>, SA: SigningActor<A, S>, S: Sig, BRBDT: BRBDataType<A>>
 
                 let num_signatures = self.pending_proof[&msg].len();
 
-                // we don't want to re-broadcast a proof if we've already reached quorum
-                // hence we check that (num_sigs - 1) was not quorum
-                if self.quorum(num_signatures, msg.gen)?
-                    && !self.quorum(num_signatures - 1, msg.gen)?
+                // we don't want to re-broadcast a proof if we've already reached supermajority
+                // hence we check that (num_sigs - 1) was not supermajority
+                if self.supermajority(num_signatures, msg.gen)?
+                    && !self.supermajority(num_signatures - 1, msg.gen)?
                 {
-                    info!("[BRB] we have quorum over msg, sending proof to network");
-                    // We have quorum, broadcast proof of agreement to network
+                    info!("[BRB] we have supermajority over msg, sending proof to network");
+                    // We have supermajority, broadcast proof of agreement to network
                     let proof = self.pending_proof[&msg].clone();
 
                     // Add ourselves to the broadcast recipients since we may have initiated this request
@@ -307,6 +378,7 @@ impl<A: Actor<S>, SA: SigningActor<A, S>, S: Sig, BRBDT: BRBDataType<A>>
         }
     }
 
+    /// Validates an incoming BRB Packet
     fn validate_packet(
         &self,
         packet: &Packet<A, S, BRBDT::Op>,
@@ -315,6 +387,7 @@ impl<A: Actor<S>, SA: SigningActor<A, S>, S: Sig, BRBDT: BRBDataType<A>>
         self.validate_payload(packet.source, &packet.payload)
     }
 
+    /// Validates a Payload
     fn validate_payload(
         &self,
         from: A,
@@ -327,6 +400,7 @@ impl<A: Actor<S>, SA: SigningActor<A, S>, S: Sig, BRBDT: BRBDataType<A>>
         }
     }
 
+    /// Validates a BRB operation
     fn validate_brb_op(
         &self,
         from: A,
@@ -382,7 +456,7 @@ impl<A: Actor<S>, SA: SigningActor<A, S>, S: Sig, BRBDT: BRBDataType<A>>
                         msg_dot: msg.dot,
                         expected_dot: self.delivered.inc(msg.dot.actor),
                     })
-                } else if !self.quorum(proof.len(), msg.gen)? {
+                } else if !self.supermajority(proof.len(), msg.gen)? {
                     Err(ValidationError::NotEnoughSignaturesToFormQuorum)
                 } else if !proof
                     .iter()
@@ -404,7 +478,8 @@ impl<A: Actor<S>, SA: SigningActor<A, S>, S: Sig, BRBDT: BRBDataType<A>>
         .map_err(Error::Validation)
     }
 
-    fn quorum(
+    /// true if n represents a supermajority of votes for a given generation.
+    fn supermajority(
         &self,
         n: usize,
         gen: Generation,
@@ -412,6 +487,9 @@ impl<A: Actor<S>, SA: SigningActor<A, S>, S: Sig, BRBDT: BRBDataType<A>>
         Ok(n * 3 > self.membership.members(gen)?.len() * 2)
     }
 
+    /// Generates a packet containing payload plus our payload signature
+    /// for each actor in targets and returns a list of all the generated
+    /// packets, ready to be sent by transport layer.
     #[allow(clippy::type_complexity)]
     fn broadcast(
         &self,
@@ -426,6 +504,7 @@ impl<A: Actor<S>, SA: SigningActor<A, S>, S: Sig, BRBDT: BRBDataType<A>>
             .collect()
     }
 
+    /// Generates a packet from self to dest containing payload plus our payload signature.
     #[allow(clippy::type_complexity)]
     fn send(
         &self,
@@ -441,11 +520,13 @@ impl<A: Actor<S>, SA: SigningActor<A, S>, S: Sig, BRBDT: BRBDataType<A>>
         })
     }
 
+    /// Signs data with our key
     fn sign(&self, data: impl Serialize) -> Result<S, Error<A, S, BRBDT::ValidationError>> {
         let bytes = bincode::serialize(&data)?;
         Ok(self.membership.id.sign(&bytes))
     }
 
+    /// Verifies that signature sig for data by signer is valid.
     fn verify(
         &self,
         data: impl Serialize,
