@@ -225,6 +225,7 @@ impl<A: Actor<S>, SA: SigningActor<A, S>, S: Sig, BRBDT: BRBDataType<A>>
     }
 
     /// Resend any proof of agreements that we have not yet received delivery confirmation for.
+    #[allow(clippy::type_complexity)]
     pub fn resend_pending_deliveries(
         &self,
     ) -> Result<Vec<Packet<A, S, BRBDT::Op>>, Error<A, S, BRBDT::ValidationError>> {
