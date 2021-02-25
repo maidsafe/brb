@@ -128,6 +128,17 @@ pub enum ValidationError<
     #[error("Proof contains invalid signatures")]
     ProofContainsInvalidSignatures,
 
+    /// We received a Op::Delivered packet for a message we did not initiate. Only the initiator should
+    /// receive these delivered packets.
+    #[error("We did not initiate this msg so we shouldn't be notified that it was delivered")]
+    DeliveredForPacketWeDidNotInitiate,
+
+    /// We received an Op::Delivered packet for a message we are no longer waiting on.
+    /// This can happen when we've already received a super-majority of Delivered packets and have
+    /// cleared our local buffer.
+    #[error("We are no longer waiting for delivery notifications for this packet")]
+    DeliveredForPacketWeAreNotWaitingOn,
+
     /// Phantom, unused.
     #[error("This variant is only here to satisfy the type checker (we need to use S in a field)")]
     PhantomSig(core::marker::PhantomData<S>),

@@ -28,10 +28,10 @@ pub use brb_membership::actor::ed25519::{Actor, Sig, SigningActor};
 use brb_membership::SigningActor as SigningActorTrait;
 
 /// A DeterministicBRB specialized to ed25519 types, for use in simulated Network and test cases.
-type State<BRBDT> = DeterministicBRB<Actor, SigningActor, Sig, BRBDT>;
+pub type State<BRBDT> = DeterministicBRB<Actor, SigningActor, Sig, BRBDT>;
 
 /// A Packet specialized to ed25519 types, for use in simulated Network and test cases.
-type Packet<BRBDT> = crate::packet::Packet<Actor, Sig, BRBDT>;
+pub type Packet<BRBDT> = crate::packet::Packet<Actor, Sig, BRBDT>;
 
 /// A BRBDataType specialized to ed25519::Actor, for use in simulated Network and test cases.
 pub trait BRBDT: BRBDataType<Actor> {}
@@ -77,7 +77,7 @@ impl<DT: BRBDT> Net<DT> {
                 proc.peers()
                     .unwrap()
                     .iter()
-                    .flat_map(|peer| self.proc_from_actor(peer))
+                    .flat_map(|peer| self.proc(peer))
                     .filter(|peer_proc| peer_proc.peers().unwrap().contains(&proc.actor()))
                     .map(|peer_proc| peer_proc.actor())
                     .collect::<BTreeSet<_>>()
@@ -99,29 +99,15 @@ impl<DT: BRBDT> Net<DT> {
         actor
     }
 
-    /// Execute arbitrary code on a proc (immutable)
-    pub fn on_proc<V>(&self, actor: &Actor, f: impl FnOnce(&State<DT>) -> V) -> Option<V> {
-        self.proc_from_actor(actor).map(|p| f(p))
-    }
-
-    /// Execute arbitrary code on a proc (mutating)
-    pub fn on_proc_mut<V>(
-        &mut self,
-        actor: &Actor,
-        f: impl FnOnce(&mut State<DT>) -> V,
-    ) -> Option<V> {
-        self.proc_from_actor_mut(actor).map(|p| f(p))
-    }
-
-    /// Get a (immutable) reference to a proc with the given actor.
-    pub fn proc_from_actor(&self, actor: &Actor) -> Option<&State<DT>> {
+    /// Get a (mutable) reference to a proc with the given actor.
+    pub fn proc(&self, actor: &Actor) -> Option<&State<DT>> {
         self.procs
             .iter()
             .find(|secure_p| &secure_p.actor() == actor)
     }
 
     /// Get a (mutable) reference to a proc with the given actor.
-    pub fn proc_from_actor_mut(&mut self, actor: &Actor) -> Option<&mut State<DT>> {
+    pub fn proc_mut(&mut self, actor: &Actor) -> Option<&mut State<DT>> {
         self.procs
             .iter_mut()
             .find(|secure_p| &secure_p.actor() == actor)
@@ -156,7 +142,8 @@ impl<DT: BRBDT> Net<DT> {
         self.n_packets += 1;
         let dest = packet.dest;
         self.delivered_packets.push(packet.clone());
-        self.on_proc_mut(&dest, |p| p.handle_packet(packet))
+        self.proc_mut(&dest)
+            .map(|p| p.handle_packet(packet))
             .unwrap_or_else(|| Ok(vec![])) // no proc to deliver too
             .unwrap_or_else(|err| {
                 warn!("[BRB] Rejected packet: {:?}", err);
@@ -172,7 +159,7 @@ impl<DT: BRBDT> Net<DT> {
         let mut member_states_iter = self
             .members()
             .into_iter()
-            .flat_map(|actor| self.proc_from_actor(&actor))
+            .flat_map(|actor| self.proc(&actor))
             .map(|p| &p.history_from_source);
 
         if let Some(reference_state) = member_states_iter.next() {

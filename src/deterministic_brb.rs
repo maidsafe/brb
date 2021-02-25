@@ -41,6 +41,10 @@ pub struct DeterministicBRB<A: Actor<S>, SA: SigningActor<A, S>, S: Sig, BRBDT: 
     /// Msgs this process has initiated and is waiting on BFT agreement for from the network.
     pub pending_proof: HashMap<Msg<A, BRBDT::Op>, BTreeMap<A, S>>,
 
+    /// Msgs this process has sent ProofOfAgreement for but has not yet received a
+    /// super-majority of delivery confirmations.
+    pub pending_delivery: HashMap<Msg<A, BRBDT::Op>, BTreeSet<A>>,
+
     /// The clock representing the most recently received messages from each process.
     /// These are messages that have been acknowledged but not yet
     /// This clock must at all times be greator or equal to the `delivered` clock.
@@ -63,11 +67,11 @@ pub struct DeterministicBRB<A: Actor<S>, SA: SigningActor<A, S>, S: Sig, BRBDT: 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Msg<A, DataTypeOp> {
     /// Generation of Msg creation
-    gen: Generation,
+    pub gen: Generation,
     /// DataType operation
-    op: DataTypeOp,
+    pub op: DataTypeOp,
     /// Dot of Msg creation
-    dot: Dot<A>,
+    pub dot: Dot<A>,
 }
 
 /// An enumeration of BRB operations
@@ -93,6 +97,13 @@ pub enum Op<A: Ord, S, DataTypeOp> {
         msg: Msg<A, DataTypeOp>,
         /// A HashSet of message signatures, by Actor.
         proof: BTreeMap<A, S>,
+    },
+
+    /// After a node receives ProofOfAgreement, it responds to the initiator with a Delivered packet
+    /// to let it know that this message was successfully delivered.
+    Delivered {
+        /// the message that was delivered
+        msg: Msg<A, DataTypeOp>,
     },
 }
 
@@ -123,6 +134,7 @@ impl<A: Actor<S>, SA: SigningActor<A, S>, S: Sig, BRBDT: BRBDataType<A>>
             membership,
             dt,
             pending_proof: Default::default(),
+            pending_delivery: Default::default(),
             delivered: Default::default(),
             received: Default::default(),
             history_from_source: Default::default(),
@@ -210,6 +222,31 @@ impl<A: Actor<S>, SA: SigningActor<A, S>, S: Sig, BRBDT: BRBDataType<A>>
             delivered: self.delivered.clone(),
         };
         self.send(peer, payload)
+    }
+
+    /// Resend any proof of agreements that we have not yet received delivery confirmation for.
+    pub fn resend_pending_deliveries(
+        &self,
+    ) -> Result<Vec<Packet<A, S, BRBDT::Op>>, Error<A, S, BRBDT::ValidationError>> {
+        let mut packets = Vec::new();
+        for (msg, delivered) in self.pending_delivery.iter() {
+            let proof = if let Some(proof) = self.pending_proof.get(&msg).cloned() {
+                proof
+            } else {
+                continue;
+            };
+
+            let recipients = &self.membership.members(msg.gen)? - delivered;
+
+            packets.extend(self.broadcast(
+                &Payload::BRB(Op::ProofOfAgreement {
+                    msg: msg.clone(),
+                    proof,
+                }),
+                recipients,
+            )?)
+        }
+        Ok(packets)
     }
 
     /// Initiates an operation for the BRBDataType being secured by BRB.
@@ -336,12 +373,15 @@ impl<A: Actor<S>, SA: SigningActor<A, S>, S: Sig, BRBDT: BRBDataType<A>>
                     info!("[BRB] we have supermajority over msg, sending proof to network");
                     // We have supermajority, broadcast proof of agreement to network
                     let proof = self.pending_proof[&msg].clone();
+                    self.pending_delivery
+                        .insert(msg.clone(), Default::default());
 
                     // Add ourselves to the broadcast recipients since we may have initiated this request
                     // while we were not yet an accepted member of the network.
                     // e.g. this happens if we request to join the network.
                     let recipients = &self.membership.members(msg.gen).unwrap()
                         | &vec![self.actor()].into_iter().collect();
+
                     self.broadcast(
                         &Payload::BRB(Op::ProofOfAgreement { msg, proof }),
                         recipients,
@@ -367,12 +407,30 @@ impl<A: Actor<S>, SA: SigningActor<A, S>, S: Sig, BRBDT: BRBDataType<A>>
                     .or_default()
                     .push((msg.clone(), proof));
 
-                // Remove the message from pending_proof since we now have proof
-                self.pending_proof.remove(&msg);
-
                 // Apply the op
-                self.dt.apply(msg.op);
+                self.dt.apply(msg.op.clone());
 
+                Ok(vec![self.send(
+                    msg.dot.actor,
+                    Payload::BRB(Op::Delivered { msg }),
+                )?])
+            }
+            Op::Delivered { msg } => {
+                let number_of_confirms = if let Some(confirms) = self.pending_delivery.get_mut(&msg)
+                {
+                    confirms.insert(source);
+                    confirms.len()
+                } else {
+                    0
+                };
+
+                if self.supermajority(number_of_confirms, msg.gen)? {
+                    // We've seen a super-majority of delivery confirmations so we can
+                    // be confident this operation has been committed.
+                    self.pending_delivery.remove(&msg);
+                    // Remove the message from pending_proof since we have now received delivery confirmation.
+                    self.pending_proof.remove(&msg);
+                }
                 Ok(vec![])
             }
         }
@@ -470,6 +528,15 @@ impl<A: Actor<S>, SA: SigningActor<A, S>, S: Sig, BRBDT: BRBDataType<A>>
                     .is_err()
                 {
                     Err(ValidationError::ProofContainsInvalidSignatures)
+                } else {
+                    Ok(())
+                }
+            }
+            Op::Delivered { msg } => {
+                if msg.dot.actor != self.actor() {
+                    Err(ValidationError::DeliveredForPacketWeDidNotInitiate)
+                } else if !self.pending_delivery.contains_key(msg) {
+                    Err(ValidationError::DeliveredForPacketWeAreNotWaitingOn)
                 } else {
                     Ok(())
                 }
