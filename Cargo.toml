@@ -1,6 +1,6 @@
 [package]
 name = "brb"
-version = "1.0.5"
+version = "1.0.6"
 description = "BRB: a Byzantine Fault Tolerant (BFT) system for achieving network agreement over eventually consistent data-type algorithms such as CRDTs"
 authors = [ "David Rusu <davidrusu.me@gmail.com>" ]
 license = "MIT OR BSD-3-Clause"
