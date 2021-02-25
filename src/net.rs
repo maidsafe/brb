@@ -99,7 +99,7 @@ impl<DT: BRBDT> Net<DT> {
         actor
     }
 
-    /// Get a (mutable) reference to a proc with the given actor.
+    /// Get a (immutable) reference to a proc with the given actor.
     pub fn proc(&self, actor: &Actor) -> Option<&State<DT>> {
         self.procs
             .iter()
