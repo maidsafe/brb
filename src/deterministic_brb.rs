@@ -251,11 +251,11 @@ impl<A: Actor<S>, SA: SigningActor<A, S>, S: Sig, BRBDT: BRBDataType<A>>
     ///       source concurrently. It's recommended to ensure there aren't any
     ///       pending deliveries before you initiate a new operation to reduce
     ///       the chance of this happening.
-    ///
     ///       A naive implementation of this would be:
     ///
-    /// ``` rust
+    /// ```ignore
     /// let mut packets_to_resend = brb.resend_pending_deliveries()?;
+    ///
     /// while !packets_to_resend.is_empty() {
     ///    // ... re-send these packets
     ///    network.send_packets(packets_to_resend);
@@ -263,7 +263,7 @@ impl<A: Actor<S>, SA: SigningActor<A, S>, S: Sig, BRBDT: BRBDataType<A>>
     ///    packets_to_resend = brb.resend_pending_deliveries()?;
     /// }
     ///
-    /// brb.exec_op()?;
+    /// brb.exec_op(op)?;
     /// ```
 
     #[allow(clippy::type_complexity)]
