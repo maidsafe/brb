@@ -246,6 +246,26 @@ impl<A: Actor<S>, SA: SigningActor<A, S>, S: Sig, BRBDT: BRBDataType<A>>
     }
 
     /// Initiates an operation for the BRBDataType being secured by BRB.
+    ///
+    /// NOTE: Network members will refuse to sign multiple operations from a
+    ///       source concurrently. It's recommended to ensure there aren't any
+    ///       pending deliveries before you initiate a new operation to reduce
+    ///       the chance of this happening.
+    ///
+    ///       A naive implementation of this would be:
+    ///
+    /// ``` rust
+    /// let mut packets_to_resend = brb.resend_pending_deliveries()?;
+    /// while !packets_to_resend.is_empty() {
+    ///    // ... re-send these packets
+    ///    network.send_packets(packets_to_resend);
+    ///    sleep(TIMEOUT_SECONDS);
+    ///    packets_to_resend = brb.resend_pending_deliveries()?;
+    /// }
+    ///
+    /// brb.exec_op()?;
+    /// ```
+
     #[allow(clippy::type_complexity)]
     pub fn exec_op(
         &self,
