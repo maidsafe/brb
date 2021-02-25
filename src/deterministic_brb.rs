@@ -43,6 +43,7 @@ pub struct DeterministicBRB<A: Actor<S>, SA: SigningActor<A, S>, S: Sig, BRBDT: 
 
     /// Msgs this process has sent ProofOfAgreement for but has not yet received a
     /// super-majority of delivery confirmations.
+    #[allow(clippy::type_complexity)]
     pub pending_delivery: HashMap<Msg<A, BRBDT::Op>, (BTreeMap<A, S>, BTreeSet<A>)>,
 
     /// The clock representing the most recently received messages from each process.
