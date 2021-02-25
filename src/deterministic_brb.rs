@@ -43,7 +43,7 @@ pub struct DeterministicBRB<A: Actor<S>, SA: SigningActor<A, S>, S: Sig, BRBDT: 
 
     /// Msgs this process has sent ProofOfAgreement for but has not yet received a
     /// super-majority of delivery confirmations.
-    pub pending_delivery: HashMap<Msg<A, BRBDT::Op>, BTreeSet<A>>,
+    pub pending_delivery: HashMap<Msg<A, BRBDT::Op>, (BTreeMap<A, S>, BTreeSet<A>)>,
 
     /// The clock representing the most recently received messages from each process.
     /// These are messages that have been acknowledged but not yet
@@ -230,19 +230,13 @@ impl<A: Actor<S>, SA: SigningActor<A, S>, S: Sig, BRBDT: BRBDataType<A>>
         &self,
     ) -> Result<Vec<Packet<A, S, BRBDT::Op>>, Error<A, S, BRBDT::ValidationError>> {
         let mut packets = Vec::new();
-        for (msg, delivered) in self.pending_delivery.iter() {
-            let proof = if let Some(proof) = self.pending_proof.get(&msg).cloned() {
-                proof
-            } else {
-                continue;
-            };
-
+        for (msg, (proof, delivered)) in self.pending_delivery.iter() {
             let recipients = &self.membership.members(msg.gen)? - delivered;
 
             packets.extend(self.broadcast(
                 &Payload::BRB(Op::ProofOfAgreement {
                     msg: msg.clone(),
-                    proof,
+                    proof: proof.clone(),
                 }),
                 recipients,
             )?)
@@ -374,8 +368,9 @@ impl<A: Actor<S>, SA: SigningActor<A, S>, S: Sig, BRBDT: BRBDataType<A>>
                     info!("[BRB] we have supermajority over msg, sending proof to network");
                     // We have supermajority, broadcast proof of agreement to network
                     let proof = self.pending_proof[&msg].clone();
+
                     self.pending_delivery
-                        .insert(msg.clone(), Default::default());
+                        .insert(msg.clone(), (proof.clone(), Default::default()));
 
                     // Add ourselves to the broadcast recipients since we may have initiated this request
                     // while we were not yet an accepted member of the network.
@@ -408,6 +403,11 @@ impl<A: Actor<S>, SA: SigningActor<A, S>, S: Sig, BRBDT: BRBDataType<A>>
                     .or_default()
                     .push((msg.clone(), proof));
 
+                // Remove the message from pending_proof since we have a proof of agreement
+                // NOTE: this is a no-op for most members, only the initiating member will have
+                //       the message in it's pending_proof set.
+                self.pending_proof.remove(&msg);
+
                 // Apply the op
                 self.dt.apply(msg.op.clone());
 
@@ -417,20 +417,18 @@ impl<A: Actor<S>, SA: SigningActor<A, S>, S: Sig, BRBDT: BRBDataType<A>>
                 )?])
             }
             Op::Delivered { msg } => {
-                let number_of_confirms = if let Some(confirms) = self.pending_delivery.get_mut(&msg)
-                {
-                    confirms.insert(source);
-                    confirms.len()
-                } else {
-                    0
-                };
+                let number_of_confirms =
+                    if let Some((_proof, confirms)) = self.pending_delivery.get_mut(&msg) {
+                        confirms.insert(source);
+                        confirms.len()
+                    } else {
+                        0
+                    };
 
                 if self.supermajority(number_of_confirms, msg.gen)? {
                     // We've seen a super-majority of delivery confirmations so we can
                     // be confident this operation has been committed.
                     self.pending_delivery.remove(&msg);
-                    // Remove the message from pending_proof since we have now received delivery confirmation.
-                    self.pending_proof.remove(&msg);
                 }
                 Ok(vec![])
             }
