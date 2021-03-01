@@ -99,7 +99,7 @@ fn test_resend_msgs() -> Result<(), &'static str> {
             .ok_or("No proc for actor_a")?
             .resend_pending_msgs()
             .map_err(|_| "Failed to resend msgs")?,
-        vec![req_packet_2.clone(), req_packet_1.clone()]
+        vec![req_packet_2, req_packet_1.clone()]
     );
 
     assert_eq!(net.deliver_packet(sig_packet_1), vec![]);
@@ -109,7 +109,7 @@ fn test_resend_msgs() -> Result<(), &'static str> {
             .ok_or("No proc for actor_a")?
             .resend_pending_msgs()
             .map_err(|_| "Failed to resend msgs")?,
-        vec![req_packet_1.clone()]
+        vec![req_packet_1]
     );
 
     let proof_of_agreement_packets = net.deliver_packet(sig_packet_2);
