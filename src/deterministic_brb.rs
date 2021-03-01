@@ -246,6 +246,7 @@ impl<A: Actor<S>, SA: SigningActor<A, S>, S: Sig, BRBDT: BRBDataType<A>>
     }
 
     /// Resend any RequestValidation packets that have not yet received enough signatures.
+    #[allow(clippy::type_complexity)]
     pub fn resend_pending_validation_requests(
         &self,
     ) -> Result<Vec<Packet<A, S, BRBDT::Op>>, Error<A, S, BRBDT::ValidationError>> {
@@ -262,6 +263,7 @@ impl<A: Actor<S>, SA: SigningActor<A, S>, S: Sig, BRBDT: BRBDataType<A>>
     }
 
     /// Resend any messages for which we haven't received a response.
+    #[allow(clippy::type_complexity)]
     pub fn resend_pending_msgs(
         &self,
     ) -> Result<Vec<Packet<A, S, BRBDT::Op>>, Error<A, S, BRBDT::ValidationError>> {
