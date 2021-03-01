@@ -245,6 +245,31 @@ impl<A: Actor<S>, SA: SigningActor<A, S>, S: Sig, BRBDT: BRBDataType<A>>
         Ok(packets)
     }
 
+    /// Resend any RequestValidation packets that have not yet received enough signatures.
+    pub fn resend_pending_validation_requests(
+        &self,
+    ) -> Result<Vec<Packet<A, S, BRBDT::Op>>, Error<A, S, BRBDT::ValidationError>> {
+        let mut packets = Vec::new();
+        for (msg, sigs) in self.pending_proof.iter() {
+            let recipients = &self.membership.members(msg.gen)? - &sigs.keys().cloned().collect();
+
+            packets.extend(self.broadcast(
+                &Payload::BRB(Op::RequestValidation { msg: msg.clone() }),
+                recipients,
+            )?)
+        }
+        Ok(packets)
+    }
+
+    /// Resend any messages for which we haven't received a response.
+    pub fn resend_pending_msgs(
+        &self,
+    ) -> Result<Vec<Packet<A, S, BRBDT::Op>>, Error<A, S, BRBDT::ValidationError>> {
+        let mut packets = self.resend_pending_validation_requests()?;
+        packets.extend(self.resend_pending_deliveries()?);
+        Ok(packets)
+    }
+
     /// Initiates an operation for the BRBDataType being secured by BRB.
     ///
     /// NOTE: Network members will refuse to sign multiple operations from a
@@ -254,13 +279,13 @@ impl<A: Actor<S>, SA: SigningActor<A, S>, S: Sig, BRBDT: BRBDataType<A>>
     ///       A naive implementation of this would be:
     ///
     /// ```ignore
-    /// let mut packets_to_resend = brb.resend_pending_deliveries()?;
+    /// let mut packets_to_resend = brb.resend_pending_msgs()?;
     ///
     /// while !packets_to_resend.is_empty() {
     ///    // ... re-send these packets
     ///    network.send_packets(packets_to_resend);
     ///    sleep(TIMEOUT_SECONDS);
-    ///    packets_to_resend = brb.resend_pending_deliveries()?;
+    ///    packets_to_resend = brb.resend_pending_msgs()?;
     /// }
     ///
     /// brb.exec_op(op)?;
@@ -268,7 +293,7 @@ impl<A: Actor<S>, SA: SigningActor<A, S>, S: Sig, BRBDT: BRBDataType<A>>
 
     #[allow(clippy::type_complexity)]
     pub fn exec_op(
-        &self,
+        &mut self,
         op: BRBDT::Op,
     ) -> Result<Vec<Packet<A, S, BRBDT::Op>>, Error<A, S, BRBDT::ValidationError>> {
         let msg = Msg {
@@ -280,7 +305,20 @@ impl<A: Actor<S>, SA: SigningActor<A, S>, S: Sig, BRBDT: BRBDataType<A>>
         };
 
         info!("[BRB] {} initiating bft for msg {:?}", self.actor(), msg);
-        self.broadcast(&Payload::BRB(Op::RequestValidation { msg }), self.peers()?)
+        let (mut self_packets, mut others_packets): (Vec<_>, Vec<_>) = self
+            .broadcast(&Payload::BRB(Op::RequestValidation { msg }), self.peers()?)?
+            .into_iter()
+            .partition(|p| p.dest == self.actor());
+
+        while let Some(packet) = self_packets.pop() {
+            let (next_self_packets, next_others_packets): (Vec<_>, Vec<_>) = self
+                .handle_packet(packet)?
+                .into_iter()
+                .partition(|p| p.dest == self.actor());
+            self_packets.extend(next_self_packets);
+            others_packets.extend(next_others_packets);
+        }
+        Ok(others_packets)
     }
 
     /// handles an incoming BRB Packet.
