@@ -35,21 +35,29 @@ impl BRBDataType<Actor> for TestDT {
 type TestNet = Net<TestDT>;
 
 #[test]
-fn test_sender_receives_confirmation_after_member_applies_operation() -> Result<(), &'static str> {
+fn test_resend_msgs() -> Result<(), &'static str> {
     let mut net = TestNet::new();
     let actor_a = net.initialize_proc();
     let actor_b = net.initialize_proc();
+    let actor_c = net.initialize_proc();
 
     let a_proc = net.proc_mut(&actor_a).ok_or("No proc for actor_a")?;
     a_proc.force_join(actor_a);
     a_proc.force_join(actor_b);
+    a_proc.force_join(actor_c);
 
     let b_proc = net.proc_mut(&actor_b).ok_or("No proc for actor_b")?;
     b_proc.force_join(actor_a);
     b_proc.force_join(actor_b);
+    b_proc.force_join(actor_c);
 
-    let packets = net
-        .proc(&actor_a)
+    let c_proc = net.proc_mut(&actor_c).ok_or("No proc for actor_c")?;
+    c_proc.force_join(actor_a);
+    c_proc.force_join(actor_b);
+    c_proc.force_join(actor_c);
+
+    let mut packets = net
+        .proc_mut(&actor_a)
         .ok_or("No proc for actor_a")?
         .exec_op(32u8)
         .map_err(|_| "Failed to generate insert op")?;
@@ -63,30 +71,68 @@ fn test_sender_receives_confirmation_after_member_applies_operation() -> Result<
     let expected_op = Op::RequestValidation {
         msg: expected_msg.clone(),
     };
+    assert_eq!(packets.len(), 2);
     assert_eq!(
         packets
             .iter()
-            .cloned()
-            .filter_map(|packet| match packet.payload {
+            .filter_map(|packet| match &packet.payload {
                 Payload::BRB(msg) => Some(msg),
                 _ => None,
             })
             .collect::<Vec<_>>(),
-        vec![expected_op.clone(), expected_op]
+        vec![&expected_op, &expected_op]
     );
 
-    let mut sig_packets = Vec::new();
-    for packet in packets {
-        sig_packets.extend(net.deliver_packet(packet));
-    }
+    let req_packet_1 = packets.pop().ok_or("Failed to pop packet")?;
+    let req_packet_2 = packets.pop().ok_or("Failed to pop packet")?;
 
-    assert_eq!(sig_packets.len(), 2); // Should recieve two signatures back.
+    let mut sig_packets = Vec::new();
+    sig_packets.extend(net.deliver_packet(req_packet_1.clone()));
+    sig_packets.extend(net.deliver_packet(req_packet_2.clone()));
+
+    assert_eq!(sig_packets.len(), 2); // Should recieve one signatures back.
     let sig_packet_1 = sig_packets.pop().ok_or("Failed to pop packet")?;
     let sig_packet_2 = sig_packets.pop().ok_or("Failed to pop packet")?;
 
+    assert_eq!(
+        net.proc(&actor_a)
+            .ok_or("No proc for actor_a")?
+            .resend_pending_msgs()
+            .map_err(|_| "Failed to resend msgs")?,
+        vec![req_packet_2.clone(), req_packet_1.clone()]
+    );
+
     assert_eq!(net.deliver_packet(sig_packet_1), vec![]);
+
+    assert_eq!(
+        net.proc(&actor_a)
+            .ok_or("No proc for actor_a")?
+            .resend_pending_msgs()
+            .map_err(|_| "Failed to resend msgs")?,
+        vec![req_packet_1.clone()]
+    );
+
     let proof_of_agreement_packets = net.deliver_packet(sig_packet_2);
-    assert_eq!(proof_of_agreement_packets.len(), 2);
+
+    // We have no more validation requests.
+    assert_eq!(
+        net.proc(&actor_a)
+            .ok_or("No proc for actor_a")?
+            .resend_pending_validation_requests()
+            .map_err(|_| "Failed to resend msgs")?,
+        vec![]
+    );
+
+    // But we do have 3 pending delivery messages.
+    assert_eq!(
+        net.proc(&actor_a)
+            .ok_or("No proc for actor_a")?
+            .resend_pending_msgs()
+            .map_err(|_| "Failed to resend msgs")?
+            .len(),
+        3
+    );
+    assert_eq!(proof_of_agreement_packets.len(), 3);
 
     let mut delivery_confirmation_packets = vec![];
     for packet in proof_of_agreement_packets.clone() {
@@ -108,11 +154,14 @@ fn test_sender_receives_confirmation_after_member_applies_operation() -> Result<
         delivery_confirmation_packets.extend(confirmed_delivered_packets);
     }
 
-    assert_eq!(delivery_confirmation_packets.len(), 2);
+    assert_eq!(delivery_confirmation_packets.len(), 3);
     let delivery_packet_1 = delivery_confirmation_packets
         .pop()
         .ok_or("Failed to pop delivery packet")?;
     let delivery_packet_2 = delivery_confirmation_packets
+        .pop()
+        .ok_or("Failed to pop delivery packet")?;
+    let delivery_packet_3 = delivery_confirmation_packets
         .pop()
         .ok_or("Failed to pop delivery packet")?;
 
@@ -121,13 +170,27 @@ fn test_sender_receives_confirmation_after_member_applies_operation() -> Result<
     assert_eq!(
         net.proc(&actor_a)
             .ok_or("No proc for actor_a")?
-            .resend_pending_deliveries()
+            .resend_pending_msgs()
             .map_err(|_| "Failed to resend pending deliveries")?,
         proof_of_agreement_packets
     );
     assert_eq!(net.deliver_packet(delivery_packet_1.clone()), vec![]);
 
-    // Now, we should only resend the PoA for the one packet we did not receive a delivery packet from.
+    // Now, we should only resend the PoA for the two packets we did not receive a delivery packet from.
+    assert_eq!(
+        net.proc(&actor_a)
+            .ok_or("No proc for actor_a")?
+            .resend_pending_msgs()
+            .map_err(|_| "Failed to resend pending deliveries")?,
+        proof_of_agreement_packets
+            .iter()
+            .cloned()
+            .filter(|p| p.dest != delivery_packet_1.source)
+            .collect::<Vec<_>>()
+    );
+
+    assert_eq!(net.deliver_packet(delivery_packet_2.clone()), vec![]);
+
     assert_eq!(
         net.proc(&actor_a)
             .ok_or("No proc for actor_a")?
@@ -136,10 +199,11 @@ fn test_sender_receives_confirmation_after_member_applies_operation() -> Result<
         proof_of_agreement_packets
             .into_iter()
             .filter(|p| p.dest != delivery_packet_1.source)
+            .filter(|p| p.dest != delivery_packet_2.source)
             .collect::<Vec<_>>()
     );
 
-    assert_eq!(net.deliver_packet(delivery_packet_2), vec![]);
+    assert_eq!(net.deliver_packet(delivery_packet_3), vec![]);
 
     assert_eq!(
         net.proc(&actor_a)
