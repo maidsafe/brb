@@ -272,7 +272,15 @@ impl<A: Actor<S>, SA: SigningActor<A, S>, S: Sig, BRBDT: BRBDataType<A>>
         Ok(packets)
     }
 
-    /// Initiates an operation for the BRBDataType being secured by BRB.
+    /// Initiates the BRB process for an operation on the BRBDataType.
+    ///
+    /// Returns BRB packets to be delivered to other network members. Packets
+    /// destined to ourselves will short-circuited and handled to completion before
+    /// this method returns.
+    ///
+    /// This short-circuiting is done to remove some potential race-conditions when
+    /// BRB is integrated into a highly concurrent application where multiple threads
+    /// are concurrently fighting to initiate BRB operations.
     ///
     /// NOTE: Network members will refuse to sign multiple operations from a
     ///       source concurrently. It's recommended to ensure there aren't any
